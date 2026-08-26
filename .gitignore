@@ -27,3 +27,6 @@ key.properties
 
 __pycache__/
 *.pyc
+
+# Gradle local cache
+**/.gradle/
