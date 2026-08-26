@@ -30,3 +30,8 @@ __pycache__/
 
 # Gradle local cache
 **/.gradle/
+
+# Local Git/ZIP backups
+*.bundle
+POSFlutter_GIT_BUNDLE_PACKAGE*.zip
+POSFlutter_RECONSTRUCTED_CANONICAL*.zip
