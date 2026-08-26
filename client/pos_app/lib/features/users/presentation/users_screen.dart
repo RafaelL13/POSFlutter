@@ -1,0 +1,1 @@
+import 'package:flutter/material.dart';import 'package:pos_app/shared/presentation/database_list_screen.dart';class UsersScreen extends StatelessWidget{const UsersScreen({super.key});@override Widget build(BuildContext context)=>const DatabaseListScreen(title:'Usuarios',query:'SELECT id,name,username,role,active FROM users ORDER BY name');}

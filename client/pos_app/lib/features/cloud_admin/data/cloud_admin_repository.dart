@@ -1,0 +1,2 @@
+import 'package:pos_app/core/network/cloud_api_client.dart';
+final class CloudAdminRepository {CloudAdminRepository(this._api);final CloudApiClient _api;Future<Map<String,Object?>> dashboard()=>_api.get('/api/reports/dashboard');Future<List<Object?>> list(String path) async {final j=await _api.get(path);return List<Object?>.from(j['items'] as List? ?? const []);}Future<Map<String,Object?>> createInvitation({int minutes=15})=>_api.post('/api/device-enrollment/invitations',{'expiresInMinutes':minutes});}

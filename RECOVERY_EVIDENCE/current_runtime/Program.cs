@@ -1,0 +1,88 @@
+using System.Data;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Pos.Application;
+using Pos.Domain;
+using Pos.Infrastructure;
+using System.Threading.RateLimiting;
+
+var builder=WebApplication.CreateBuilder(args);
+var connection=builder.Configuration.GetConnectionString("SqlServer") ?? throw new InvalidOperationException("ConnectionStrings:SqlServer is required.");
+builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
+var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
+if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
+builder.Services.AddAuthorization(o=>o.AddPolicy("Administrator",p=>p.RequireRole("Administrator")));
+builder.Services.AddRateLimiter(o=>
+{
+    o.AddPolicy("enrollment", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+builder.Services.AddHealthChecks().AddDbContextCheck<PosDbContext>(); builder.Services.AddOpenApi(); builder.Services.AddEndpointsApiExplorer(); builder.Services.AddSwaggerGen();
+var app=builder.Build(); app.UseHttpsRedirection(); app.UseRateLimiter(); app.UseAuthentication(); app.UseAuthorization(); if(app.Environment.IsDevelopment()){app.MapOpenApi();app.UseSwagger();app.UseSwaggerUI();}
+app.MapHealthChecks("/health");
+
+app.MapPost("/api/auth/login",async(LoginRequest r,ITokenService s,CancellationToken ct)=>(await s.LoginAsync(r,ct)) is { } a?Results.Ok(a):Results.Unauthorized());
+app.MapPost("/api/auth/refresh",async(RefreshRequest r,ITokenService s,CancellationToken ct)=>(await s.RefreshAsync(r,ct)) is { } a?Results.Ok(a):Results.Unauthorized());
+
+app.MapPost("/api/bootstrap",async(BootstrapRequest r,PosDbContext db,TokenService tokens,CancellationToken ct)=>{
+ await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);
+ var existing=await db.Businesses.SingleOrDefaultAsync(x=>x.GlobalId==r.BusinessGlobalId,ct);
+ if(existing is not null){
+   var exact=await (from b in db.Businesses where b.GlobalId==r.BusinessGlobalId
+                    join br in db.Branches on b.Id equals br.BusinessId
+                    join d in db.Devices on br.Id equals d.BranchId
+                    join u in db.Users on b.Id equals u.BusinessId
+                    where br.GlobalId==r.BranchGlobalId && d.GlobalId==r.DeviceGlobalId && u.GlobalId==r.UserGlobalId &&
+                          u.Username==r.Username && u.PasswordHash==r.PasswordHash && u.PasswordSalt==r.PasswordSalt
+                    select new {b,br,d,u}).SingleOrDefaultAsync(ct);
+   if(exact is null){await tx.RollbackAsync(ct);return Results.Conflict();}
+   var recovered=await tokens.IssueForBootstrapAsync(exact.b.GlobalId,exact.br.GlobalId,exact.d.GlobalId,exact.u.GlobalId,ct);
+   await tx.CommitAsync(ct); return recovered is null?Results.Conflict():Results.Ok(recovered);
+ }
+ if(await db.Businesses.AnyAsync(ct)){await tx.RollbackAsync(ct);return Results.Conflict();}
+ if(r.BusinessGlobalId==Guid.Empty||r.BranchGlobalId==Guid.Empty||r.DeviceGlobalId==Guid.Empty||r.UserGlobalId==Guid.Empty||string.IsNullOrWhiteSpace(r.PasswordHash)||string.IsNullOrWhiteSpace(r.PasswordSalt)){await tx.RollbackAsync(ct);return Results.BadRequest();}
+ var now=DateTimeOffset.UtcNow;
+ var b=new Business{GlobalId=r.BusinessGlobalId,Name=r.BusinessName.Trim(),Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.Businesses.Add(b);await db.SaveChangesAsync(ct);
+ var br=new Branch{GlobalId=r.BranchGlobalId,BusinessId=b.Id,Name=r.BranchName.Trim(),Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.Branches.Add(br);await db.SaveChangesAsync(ct);
+ var d=new Device{GlobalId=r.DeviceGlobalId,BranchId=br.Id,Name=r.DeviceName.Trim(),Mode="PointOfSale",Active=true,CreatedAt=now,LastSyncAt=now,ServerVersion=1};
+ var u=new UserAccount{GlobalId=r.UserGlobalId,BusinessId=b.Id,Name=r.UserName.Trim(),Username=r.Username.Trim(),PasswordHash=r.PasswordHash,PasswordSalt=r.PasswordSalt,Role="Administrator",Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.AddRange(d,u);await db.SaveChangesAsync(ct);
+ var auth=await tokens.IssueForBootstrapAsync(b.GlobalId,br.GlobalId,d.GlobalId,u.GlobalId,ct); if(auth is null){await tx.RollbackAsync(ct);return Results.Conflict();}
+ await tx.CommitAsync(ct);return Results.Ok(auth);
+});
+
+app.MapPost("/api/device-enrollment/invitations",async(CreateDeviceEnrollmentRequest r,HttpContext http,DeviceEnrollmentService s,CancellationToken ct)=>Results.Ok(await s.CreateInvitationAsync(TenantClaims.Require(http.User),r,ct))).RequireAuthorization("Administrator");
+app.MapPost("/api/device-enrollment/redeem",async(RedeemDeviceEnrollmentRequest r,DeviceEnrollmentService s,CancellationToken ct)=>(await s.RedeemAsync(r,ct)) is { } x?Results.Ok(x):Results.BadRequest(new{message="Unable to enroll device."})).RequireRateLimiting("enrollment");
+app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PushAsync(r,TenantClaims.Require(h.User),ct))).RequireAuthorization();
+app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();
+
+static SyncTenantContext T(HttpContext h)=>TenantClaims.Require(h.User);
+app.MapGet("/api/reports/dashboard",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.DashboardAsync(T(h),ct))).RequireAuthorization();
+app.MapGet("/api/products",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ProductsAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/categories",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CategoriesAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/suppliers",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SuppliersAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/sales",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SalesAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/sales/{globalId:guid}",async(Guid globalId,HttpContext h,TenantReadService r,CancellationToken ct)=>(await r.SaleAsync(T(h),globalId,ct)) is { } sale?Results.Ok(sale):Results.NotFound()).RequireAuthorization();
+app.MapGet("/api/purchases",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.PurchasesAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/inventory",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.InventoryAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/inventory/lots",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.LotsAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/expenses",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ExpensesAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/cash/sessions",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/cash",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
+app.MapGet("/api/users",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.UsersAsync(T(h),ct)})).RequireAuthorization();
+app.Run();
+public partial class Program { }

@@ -1,0 +1,3 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/features/pos/domain/cart.dart';
+void main(){test('subtotal descuento y total usan enteros de centavos',(){final lines=[CartLine(productId:1,productGlobalId:'p',name:'P',quantity:3,unitPriceCents:18000),CartLine(productId:2,productGlobalId:'q',name:'Q',quantity:1,unitPriceCents:22000)];final t=calculateSaleTotals(lines,discountCents:1000);expect(t.subtotalCents,76000);expect(t.totalCents,75000);});test('descuento mayor al subtotal se rechaza',()=>expect(()=>calculateSaleTotals([CartLine(productId:1,productGlobalId:'p',name:'P',quantity:1,unitPriceCents:100)],discountCents:101),throwsArgumentError));}

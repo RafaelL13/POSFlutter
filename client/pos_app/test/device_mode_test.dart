@@ -1,0 +1,3 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/core/context/local_app_context.dart';
+void main(){test('AdminReadOnly se identifica como solo lectura',(){const c=LocalAppContext(businessId:1,businessGlobalId:'b',branchId:1,branchGlobalId:'br',deviceId:1,deviceGlobalId:'d',deviceMode:'AdminReadOnly',userId:1,userGlobalId:'u',role:'Administrator');expect(c.isAdminReadOnly,isTrue);expect(c.isAdministrator,isTrue);});test('PointOfSale no es read only',(){const c=LocalAppContext(businessId:1,businessGlobalId:'b',branchId:1,branchGlobalId:'br',deviceId:1,deviceGlobalId:'d',deviceMode:'PointOfSale',userId:1,userGlobalId:'u',role:'Seller');expect(c.isAdminReadOnly,isFalse);});}

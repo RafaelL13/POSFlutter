@@ -1,0 +1,8 @@
+using Pos.Application;
+using Pos.Domain;
+namespace Pos.Infrastructure.Tests;
+public sealed class TenantIsolationTests
+{
+ [Fact] public async Task BusinessB_cannot_read_sale_from_businessA(){await using var t=await TestDatabase.CreateAsync();var a=await t.SeedTenantAsync("A");var b=await t.SeedTenantAsync("B");t.Db.Sales.Add(new Sale{GlobalId=Guid.NewGuid(),IdempotencyKey=Guid.NewGuid(),BusinessId=a.Business.Id,BranchId=a.Branch.Id,DeviceId=a.Device.Id,UserId=a.User.Id,Folio="A-1",SaleDateTime=DateTimeOffset.UtcNow,PaymentMethod="Cash",Status="Confirmed",CreatedAt=DateTimeOffset.UtcNow});await t.Db.SaveChangesAsync();var service=new TenantReadService(t.Db);var ctx=new SyncTenantContext(b.Business.Id,b.Business.GlobalId,b.Branch.Id,b.Branch.GlobalId,b.Device.Id,b.Device.GlobalId,b.User.Id,b.User.GlobalId,b.User.Role,b.Device.Mode);var result=await service.SaleAsync(ctx,t.Db.Sales.Single(x=>x.BusinessId==a.Business.Id).GlobalId,CancellationToken.None);Assert.Null(result);}
+ [Fact] public async Task Product_lists_are_tenant_scoped(){await using var t=await TestDatabase.CreateAsync();var a=await t.SeedTenantAsync("A");var b=await t.SeedTenantAsync("B");t.Db.Products.AddRange(new Product{GlobalId=Guid.NewGuid(),BusinessId=a.Business.Id,Code="A",Name="A",UpdatedAt=DateTimeOffset.UtcNow},new Product{GlobalId=Guid.NewGuid(),BusinessId=b.Business.Id,Code="B",Name="B",UpdatedAt=DateTimeOffset.UtcNow});await t.Db.SaveChangesAsync();var s=new TenantReadService(t.Db);var ctx=new SyncTenantContext(a.Business.Id,a.Business.GlobalId,a.Branch.Id,a.Branch.GlobalId,a.Device.Id,a.Device.GlobalId,a.User.Id,a.User.GlobalId,a.User.Role,a.Device.Mode);var rows=await s.ProductsAsync(ctx,CancellationToken.None);Assert.Single(rows);}
+}

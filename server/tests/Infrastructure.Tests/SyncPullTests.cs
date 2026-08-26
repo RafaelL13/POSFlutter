@@ -1,0 +1,9 @@
+using System.Text.Json;
+using Pos.Application;
+using Pos.Domain;
+namespace Pos.Infrastructure.Tests;
+public sealed class SyncPullTests
+{
+ [Fact] public async Task Pull_is_tenant_scoped_monotonic_and_paginated(){await using var t=await TestDatabase.CreateAsync();var a=await t.SeedTenantAsync("A");var b=await t.SeedTenantAsync("B");var stamp=DateTimeOffset.UtcNow;for(var i=0;i<3;i++)t.Db.SyncChanges.Add(new SyncChange{BusinessId=a.Business.Id,EntityType="Product",EntityGlobalId=Guid.NewGuid(),Operation="Update",Version=1,PayloadJson=JsonSerializer.Serialize(new{globalId=Guid.NewGuid(),businessGlobalId=a.Business.GlobalId,serverVersion=1}),CreatedAt=stamp});t.Db.SyncChanges.Add(new SyncChange{BusinessId=b.Business.Id,EntityType="Product",EntityGlobalId=Guid.NewGuid(),Operation="Update",Version=1,PayloadJson="{}",CreatedAt=stamp});await t.Db.SaveChangesAsync();var s=new SyncService(t.Db);var ctx=new SyncTenantContext(a.Business.Id,a.Business.GlobalId,a.Branch.Id,a.Branch.GlobalId,a.Device.Id,a.Device.GlobalId,a.User.Id,a.User.GlobalId,a.User.Role,a.Device.Mode);var first=await s.PullAsync(0,2,ctx,CancellationToken.None);Assert.Equal(2,first.Changes.Count);Assert.True(first.HasMore);Assert.True(first.NextCursor>0);var second=await s.PullAsync(first.NextCursor,200,ctx,CancellationToken.None);Assert.Single(second.Changes);Assert.False(second.HasMore);Assert.True(second.NextCursor>first.NextCursor);}
+ [Fact] public async Task Empty_pull_keeps_cursor(){await using var t=await TestDatabase.CreateAsync();var a=await t.SeedTenantAsync("A");var s=new SyncService(t.Db);var ctx=new SyncTenantContext(a.Business.Id,a.Business.GlobalId,a.Branch.Id,a.Branch.GlobalId,a.Device.Id,a.Device.GlobalId,a.User.Id,a.User.GlobalId,a.User.Role,a.Device.Mode);var r=await s.PullAsync(77,100,ctx,CancellationToken.None);Assert.Equal(77,r.NextCursor);Assert.Empty(r.Changes);}
+}

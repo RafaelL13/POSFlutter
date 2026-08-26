@@ -1,0 +1,3 @@
+final class CartLine { CartLine({required this.productId,required this.productGlobalId,required this.name,required this.quantity,required this.unitPriceCents});final int productId;final String productGlobalId;final String name;int quantity;final int unitPriceCents;int get totalCents=>quantity*unitPriceCents;}
+final class SaleTotals { const SaleTotals(this.subtotalCents,this.discountCents);final int subtotalCents;final int discountCents;int get totalCents=>subtotalCents-discountCents;}
+SaleTotals calculateSaleTotals(Iterable<CartLine> lines,{int discountCents=0}){final subtotal=lines.fold<int>(0,(s,l)=>s+l.totalCents);if(discountCents<0||discountCents>subtotal)throw ArgumentError('Descuento inválido.');return SaleTotals(subtotal,discountCents);}
