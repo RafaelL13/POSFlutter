@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, os, re, sys
+import json, os, re, subprocess, sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 try:
@@ -109,15 +109,29 @@ for p in functional_files():
 for n in [*patterns,'empty source','trailing whitespace']:
     if not any(x==n for x,_ in errors): ok(n,'none in functional source')
 
-# Accidental artifacts
+# Accidental artifacts: fail only for files tracked by Git.
+# Local build/cache directories (bin/obj/.gradle/etc.) are expected during real SDK validation
+# and are already excluded by .gitignore; their mere presence must not fail the canonical gate.
 bad=[]
-for p in ROOT.rglob('*'):
-    rel=p.relative_to(ROOT)
-    if 'RECOVERY_EVIDENCE' in rel.parts: continue
-    if p.is_dir() and p.name in {'.dart_tool','build','bin','obj','TestResults','.gradle'}: bad.append(str(rel)+'/')
-    if p.is_file() and (p.suffix.lower() in {'.db','.sqlite','.sqlite3','.log','.pfx','.p12','.jks','.keystore'} or p.name in {'local.properties','key.properties'}): bad.append(str(rel))
-if bad: fail('temporary/binary artifacts',', '.join(bad[:60]))
-else: ok('temporary/binary artifacts','none in canonical functional tree')
+try:
+    tracked_raw=subprocess.check_output(
+        ['git','-C',str(ROOT),'ls-files','-z'],
+        stderr=subprocess.STDOUT,
+    )
+except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+    fail('temporary/binary artifacts',f'unable to inspect tracked Git files: {exc}')
+else:
+    artifact_dirs={'.dart_tool','build','bin','obj','TestResults','.gradle'}
+    artifact_suffixes={'.db','.sqlite','.sqlite3','.log','.pfx','.p12','.jks','.keystore'}
+    artifact_names={'local.properties','key.properties'}
+    for raw in tracked_raw.split(b'\0'):
+        if not raw: continue
+        rel=Path(raw.decode('utf-8','surrogateescape'))
+        if 'RECOVERY_EVIDENCE' in rel.parts: continue
+        if any(part in artifact_dirs for part in rel.parts[:-1]): bad.append(str(rel))
+        if rel.suffix.lower() in artifact_suffixes or rel.name in artifact_names: bad.append(str(rel))
+    if bad: fail('temporary/binary artifacts',', '.join(sorted(set(bad))[:60]))
+    else: ok('temporary/binary artifacts','none tracked in canonical Git tree')
 
 # High-confidence secrets: detect actual literal credentials, not identifiers/config keys/fixtures/placeholders.
 secret_hits=[]; low_conf=[]
