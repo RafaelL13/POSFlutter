@@ -1,12 +1,14 @@
 import 'dart:async';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+
 import 'schema_v1.dart';
 import 'schema_v2.dart';
 import 'schema_v3.dart';
 
 final class AppDatabase {
-  AppDatabase({String fileName = 'pos_flutter.db'}) : _fileName = fileName;
+  AppDatabase({this._fileName = 'pos_flutter.db'});
   static const schemaVersion = 3;
   final String _fileName;
   Database? _db;
@@ -22,7 +24,7 @@ final class AppDatabase {
       version: schemaVersion,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
-        await db.execute('PRAGMA journal_mode = WAL');
+        await db.rawQuery('PRAGMA journal_mode = WAL');
       },
       onCreate: (db, _) async {
         await _executeAll(db, schemaV1Statements);
@@ -30,20 +32,30 @@ final class AppDatabase {
         await _executeAll(db, schemaV3Statements);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2 && newVersion >= 2) await _executeAll(db, schemaV2Statements);
-        if (oldVersion < 3 && newVersion >= 3) await _executeAll(db, schemaV3Statements);
+        if (oldVersion < 2 && newVersion >= 2) {
+          await _executeAll(db, schemaV2Statements);
+        }
+        if (oldVersion < 3 && newVersion >= 3) {
+          await _executeAll(db, schemaV3Statements);
+        }
       },
     );
     return _db!;
   }
 
-  Future<T> criticalTransaction<T>(Future<T> Function(Transaction tx) action) async {
+  Future<T> criticalTransaction<T>(
+    Future<T> Function(Transaction tx) action,
+  ) async {
     final db = await open();
     return db.transaction(action, exclusive: true);
   }
 
-  Future<T> maintenance<T>(Future<T> Function(String databasePath) action) async {
-    if (_maintenance != null) throw StateError('Ya existe una operación de mantenimiento.');
+  Future<T> maintenance<T>(
+    Future<T> Function(String databasePath) action,
+  ) async {
+    if (_maintenance != null) {
+      throw StateError('Ya existe una operación de mantenimiento.');
+    }
     // Open before installing the barrier; otherwise open() would wait on this same gate.
     final db = await open();
     final path = db.path;
@@ -59,9 +71,14 @@ final class AppDatabase {
     }
   }
 
-  Future<void> close() async { await _db?.close(); _db = null; }
+  Future<void> close() async {
+    await _db?.close();
+    _db = null;
+  }
 
   static Future<void> _executeAll(DatabaseExecutor db, List<String> sql) async {
-    for (final statement in sql) { await db.execute(statement); }
+    for (final statement in sql) {
+      await db.execute(statement);
+    }
   }
 }

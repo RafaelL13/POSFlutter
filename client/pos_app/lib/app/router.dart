@@ -19,23 +19,44 @@ import 'package:pos_app/features/sales/presentation/sales_screen.dart';
 import 'package:pos_app/features/suppliers/presentation/suppliers_screen.dart';
 import 'package:pos_app/features/users/presentation/users_screen.dart';
 
-final appRouter = GoRouter(initialLocation:'/first-run',routes:[
-  GoRoute(path:'/first-run',builder:(_,__)=>const FirstRunScreen()),
-  GoRoute(path:'/login',builder:(_,__)=>const LoginScreen()),
-  GoRoute(path:'/dashboard',builder:(_,__)=>const DashboardScreen()),
-  GoRoute(path:'/pos',builder:(_,__)=>const PosScreen()),
-  GoRoute(path:'/products',builder:(_,__)=>const ProductsScreen()),
-  GoRoute(path:'/categories',builder:(_,__)=>const CategoriesScreen()),
-  GoRoute(path:'/suppliers',builder:(_,__)=>const SuppliersScreen()),
-  GoRoute(path:'/purchases',builder:(_,__)=>const PurchasesScreen()),
-  GoRoute(path:'/inventory',builder:(_,__)=>const InventoryScreen()),
-  GoRoute(path:'/sales',builder:(_,__)=>const SalesScreen()),
-  GoRoute(path:'/cash',builder:(_,__)=>const CashScreen()),
-  GoRoute(path:'/expenses',builder:(_,__)=>const ExpensesScreen()),
-  GoRoute(path:'/reports',builder:(_,__)=>const ReportsScreen()),
-  GoRoute(path:'/users',builder:(_,__)=>const UsersScreen()),
-  GoRoute(path:'/backup',builder:(_,__)=>const BackupScreen()),
-  GoRoute(path:'/cloud-admin',builder:(_,__)=>const CloudAdminScreen()),
-  GoRoute(path:'/cloud-admin/reports',builder:(_,__)=>const RemoteReportsScreen()),
-  GoRoute(path:'/cloud-admin/reports/:kind',builder:(_,state){final name=state.pathParameters['kind'];RemoteReportKind? kind;for(final candidate in RemoteReportKind.values){if(candidate.name==name){kind=candidate;break;}}return kind==null?const RemoteReportsScreen():RemoteReportDetailScreen(kind:kind);}),
-]);
+final appRouter = GoRouter(
+  initialLocation: '/first-run',
+  routes: [
+    GoRoute(path: '/first-run', builder: (_, _) => const FirstRunScreen()),
+    GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+    GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+    GoRoute(path: '/pos', builder: (_, _) => const PosScreen()),
+    GoRoute(path: '/products', builder: (_, _) => const ProductsScreen()),
+    GoRoute(path: '/categories', builder: (_, _) => const CategoriesScreen()),
+    GoRoute(path: '/suppliers', builder: (_, _) => const SuppliersScreen()),
+    GoRoute(path: '/purchases', builder: (_, _) => const PurchasesScreen()),
+    GoRoute(path: '/inventory', builder: (_, _) => const InventoryScreen()),
+    GoRoute(path: '/sales', builder: (_, _) => const SalesScreen()),
+    GoRoute(path: '/cash', builder: (_, _) => const CashScreen()),
+    GoRoute(path: '/expenses', builder: (_, _) => const ExpensesScreen()),
+    GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
+    GoRoute(path: '/users', builder: (_, _) => const UsersScreen()),
+    GoRoute(path: '/backup', builder: (_, _) => const BackupScreen()),
+    GoRoute(path: '/cloud-admin', builder: (_, _) => const CloudAdminScreen()),
+    GoRoute(
+      path: '/cloud-admin/reports',
+      builder: (_, _) => const RemoteReportsScreen(),
+    ),
+    GoRoute(
+      path: '/cloud-admin/reports/:kind',
+      builder: (_, state) {
+        final name = state.pathParameters['kind'];
+        RemoteReportKind? kind;
+        for (final candidate in RemoteReportKind.values) {
+          if (candidate.name == name) {
+            kind = candidate;
+            break;
+          }
+        }
+        return kind == null
+            ? const RemoteReportsScreen()
+            : RemoteReportDetailScreen(kind: kind);
+      },
+    ),
+  ],
+);

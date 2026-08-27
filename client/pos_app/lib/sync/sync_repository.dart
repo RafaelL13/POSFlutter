@@ -8,9 +8,8 @@ import 'package:pos_app/sync/sync_operation.dart';
 import 'package:pos_app/sync/sync_pull.dart';
 
 final class SyncRepository {
-  SyncRepository({required AppDatabase database, IdGenerator? idGenerator})
-      : _database = database,
-        _ids = idGenerator ?? const UuidV7Generator();
+  SyncRepository({required this._database, IdGenerator? idGenerator})
+    : _ids = idGenerator ?? const UuidV7Generator();
 
   final AppDatabase _database;
   final IdGenerator _ids;
@@ -52,7 +51,11 @@ final class SyncRepository {
         if (result.status == 'Applied' || result.status == 'AlreadyProcessed') {
           await tx.update(
             'sync_queue',
-            {'status': 'Synced', 'error_message': null, 'next_attempt_at': null},
+            {
+              'status': 'Synced',
+              'error_message': null,
+              'next_attempt_at': null,
+            },
             where: 'global_id = ?',
             whereArgs: [result.globalId],
           );
@@ -60,7 +63,10 @@ final class SyncRepository {
         }
 
         if (result.status == 'Retry') {
-          final nextRetry = DateTime.now().toUtc().add(const Duration(seconds: 30)).toIso8601String();
+          final nextRetry = DateTime.now()
+              .toUtc()
+              .add(const Duration(seconds: 30))
+              .toIso8601String();
           await tx.rawUpdate(
             "UPDATE sync_queue SET status = 'Error', retry_count = retry_count + 1, error_message = ?, next_attempt_at = ? WHERE global_id = ?",
             [_safeMessage(result.error), nextRetry, result.globalId],
@@ -68,11 +74,17 @@ final class SyncRepository {
           continue;
         }
 
-        if (result.status == 'Conflict' && result.remoteVersion != null && result.remotePayload != null) {
+        if (result.status == 'Conflict' &&
+            result.remoteVersion != null &&
+            result.remotePayload != null) {
           await _recordPushConflict(tx, result);
           await tx.rawUpdate(
             "UPDATE sync_queue SET status = 'Error', retry_count = retry_count + 1, error_message = ?, next_attempt_at = NULL WHERE global_id = ?",
-            [_safeMessage(result.error) ?? 'Conflicto pendiente de resolución.', result.globalId],
+            [
+              _safeMessage(result.error) ??
+                  'Conflicto pendiente de resolución.',
+              result.globalId,
+            ],
           );
           continue;
         }
@@ -85,12 +97,18 @@ final class SyncRepository {
     });
   }
 
-  Future<void> markTransportFailure(List<SyncOperationRecord> operations, String message) async {
+  Future<void> markTransportFailure(
+    List<SyncOperationRecord> operations,
+    String message,
+  ) async {
     if (operations.isEmpty) return;
     final db = await _database.open();
     await db.transaction((tx) async {
       for (final operation in operations) {
-        final nextRetry = DateTime.now().toUtc().add(_backoff(operation.retryCount + 1)).toIso8601String();
+        final nextRetry = DateTime.now()
+            .toUtc()
+            .add(_backoff(operation.retryCount + 1))
+            .toIso8601String();
         await tx.rawUpdate(
           '''
           UPDATE sync_queue
@@ -113,7 +131,9 @@ final class SyncRepository {
 
   Future<int> pendingCount() async {
     final db = await _database.open();
-    final result = await db.rawQuery("SELECT COUNT(*) AS count FROM sync_queue WHERE status <> 'Synced'");
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) AS count FROM sync_queue WHERE status <> 'Synced'",
+    );
     return result.first['count']! as int;
   }
 
@@ -136,11 +156,15 @@ final class SyncRepository {
     await db.transaction((tx) async {
       final current = await _cursorInTransaction(tx);
       if (batch.nextCursor < current) {
-        throw StateError('El servidor devolvió un cursor anterior al cursor local.');
+        throw StateError(
+          'El servidor devolvió un cursor anterior al cursor local.',
+        );
       }
       if (batch.nextCursor == current) {
         if (batch.changes.any((change) => change.cursor > current)) {
-          throw StateError('El lote remoto contiene cambios posteriores sin avanzar el cursor.');
+          throw StateError(
+            'El lote remoto contiene cambios posteriores sin avanzar el cursor.',
+          );
         }
         return;
       }
@@ -152,20 +176,28 @@ final class SyncRepository {
       for (final change in batch.changes) {
         if (change.cursor <= current) continue;
         if (change.cursor <= previousCursor) {
-          throw StateError('Los cambios remotos no están ordenados por cursor ascendente.');
+          throw StateError(
+            'Los cambios remotos no están ordenados por cursor ascendente.',
+          );
         }
         if (change.cursor > batch.nextCursor) {
           throw StateError('Un cambio remoto excede el cursor final del lote.');
         }
         previousCursor = change.cursor;
       }
-      final effective = batch.changes.where((change) => change.cursor > current).toList(growable: false);
+      final effective = batch.changes
+          .where((change) => change.cursor > current)
+          .toList(growable: false);
       if (effective.isEmpty || effective.last.cursor != batch.nextCursor) {
-        throw StateError('El cursor final no coincide con el último cambio del lote.');
+        throw StateError(
+          'El cursor final no coincide con el último cambio del lote.',
+        );
       }
 
-      final ordered = [...effective]..sort((a, b) {
-          final rank = _entityRank(a.entityType).compareTo(_entityRank(b.entityType));
+      final ordered = [...effective]
+        ..sort((a, b) {
+          final rank = _entityRank(a.entityType)
+              .compareTo(_entityRank(b.entityType));
           return rank != 0 ? rank : a.cursor.compareTo(b.cursor);
         });
       for (final change in ordered) {
@@ -173,11 +205,11 @@ final class SyncRepository {
       }
 
       final now = DateTime.now().toUtc().toIso8601String();
-      await tx.insert(
-        'app_settings',
-        {'key': 'sync_pull_cursor', 'value': batch.nextCursor.toString(), 'updated_at': now},
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await tx.insert('app_settings', {
+        'key': 'sync_pull_cursor',
+        'value': batch.nextCursor.toString(),
+        'updated_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await tx.update(
         'devices',
         {'last_sync_at': batch.serverTime.toIso8601String()},
@@ -193,11 +225,17 @@ final class SyncRepository {
     LocalAppContext context,
   ) async {
     if (change.operation != 'Create' && change.operation != 'Update') {
-      throw StateError('Operación pull no soportada: ${change.entityType}/${change.operation}.');
+      throw StateError(
+        'Operación pull no soportada: ${change.entityType}/${change.operation}.',
+      );
     }
 
     _validateRemoteBusiness(change, context.businessGlobalId);
-    final localVersion = await _localServerVersion(tx, change.entityType, change.entityGlobalId);
+    final localVersion = await _localServerVersion(
+      tx,
+      change.entityType,
+      change.entityGlobalId,
+    );
     if (change.version <= localVersion) return;
 
     final pending = await tx.query(
@@ -240,9 +278,15 @@ final class SyncRepository {
     }
   }
 
-  Future<void> _applyBusiness(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyBusiness(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     if (change.entityGlobalId != context.businessGlobalId) {
-      throw StateError('El servidor intentó aplicar otro negocio en esta base local.');
+      throw StateError(
+        'El servidor intentó aplicar otro negocio en esta base local.',
+      );
     }
     final payload = change.payload;
     await tx.update(
@@ -258,9 +302,19 @@ final class SyncRepository {
     );
   }
 
-  Future<void> _applyBranch(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyBranch(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
-    final rows = await tx.query('branches', columns: ['id'], where: 'global_id = ?', whereArgs: [change.entityGlobalId], limit: 1);
+    final rows = await tx.query(
+      'branches',
+      columns: ['id'],
+      where: 'global_id = ?',
+      whereArgs: [change.entityGlobalId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'business_id': context.businessId,
@@ -275,16 +329,41 @@ final class SyncRepository {
     } else {
       values.remove('global_id');
       values.remove('business_id');
-      await tx.update('branches', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'branches',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<void> _applyDevice(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyDevice(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
     final branchGlobalId = _requiredString(payload, 'branchGlobalId');
-    final branchRows = await tx.query('branches', columns: ['id'], where: 'global_id = ? AND business_id = ?', whereArgs: [branchGlobalId, context.businessId], limit: 1);
-    if (branchRows.isEmpty) throw StateError('El dispositivo remoto referencia una sucursal aún no disponible localmente.');
-    final rows = await tx.query('devices', columns: ['id'], where: 'global_id = ?', whereArgs: [change.entityGlobalId], limit: 1);
+    final branchRows = await tx.query(
+      'branches',
+      columns: ['id'],
+      where: 'global_id = ? AND business_id = ?',
+      whereArgs: [branchGlobalId, context.businessId],
+      limit: 1,
+    );
+    if (branchRows.isEmpty) {
+      throw StateError(
+        'El dispositivo remoto referencia una sucursal aún no disponible localmente.',
+      );
+    }
+    final rows = await tx.query(
+      'devices',
+      columns: ['id'],
+      where: 'global_id = ?',
+      whereArgs: [change.entityGlobalId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'branch_id': branchRows.first['id'],
@@ -300,17 +379,37 @@ final class SyncRepository {
       await tx.insert('devices', values);
     } else {
       values.remove('global_id');
-      await tx.update('devices', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'devices',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<void> _applyUser(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyUser(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
     final role = _requiredString(payload, 'role');
-    if (!const {'Administrator', 'Seller', 'Supervisor', 'Manager'}.contains(role)) {
+    if (!const {
+      'Administrator',
+      'Seller',
+      'Supervisor',
+      'Manager',
+    }.contains(role)) {
       throw StateError('El servidor devolvió un rol de usuario no soportado.');
     }
-    final rows = await tx.query('users', columns: ['id'], where: 'global_id = ? AND business_id = ?', whereArgs: [change.entityGlobalId, context.businessId], limit: 1);
+    final rows = await tx.query(
+      'users',
+      columns: ['id'],
+      where: 'global_id = ? AND business_id = ?',
+      whereArgs: [change.entityGlobalId, context.businessId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'business_id': context.businessId,
@@ -329,13 +428,28 @@ final class SyncRepository {
     } else {
       values.remove('global_id');
       values.remove('business_id');
-      await tx.update('users', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'users',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<void> _applyCategory(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyCategory(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
-    final rows = await tx.query('categories', columns: ['id'], where: 'global_id = ? AND business_id = ?', whereArgs: [change.entityGlobalId, context.businessId], limit: 1);
+    final rows = await tx.query(
+      'categories',
+      columns: ['id'],
+      where: 'global_id = ? AND business_id = ?',
+      whereArgs: [change.entityGlobalId, context.businessId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'business_id': context.businessId,
@@ -351,13 +465,28 @@ final class SyncRepository {
     } else {
       values.remove('global_id');
       values.remove('business_id');
-      await tx.update('categories', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'categories',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<void> _applySupplier(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applySupplier(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
-    final rows = await tx.query('suppliers', columns: ['id'], where: 'global_id = ? AND business_id = ?', whereArgs: [change.entityGlobalId, context.businessId], limit: 1);
+    final rows = await tx.query(
+      'suppliers',
+      columns: ['id'],
+      where: 'global_id = ? AND business_id = ?',
+      whereArgs: [change.entityGlobalId, context.businessId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'business_id': context.businessId,
@@ -377,11 +506,20 @@ final class SyncRepository {
     } else {
       values.remove('global_id');
       values.remove('business_id');
-      await tx.update('suppliers', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'suppliers',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<void> _applyProduct(Transaction tx, SyncPullChange change, LocalAppContext context) async {
+  Future<void> _applyProduct(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
     final payload = change.payload;
     int? categoryId;
     final categoryGlobalId = _nullableString(payload['categoryGlobalId']);
@@ -394,14 +532,22 @@ final class SyncRepository {
         limit: 1,
       );
       if (categories.isEmpty) {
-        throw StateError('El producto remoto referencia una categoría aún no disponible localmente.');
+        throw StateError(
+          'El producto remoto referencia una categoría aún no disponible localmente.',
+        );
       }
       categoryId = categories.first['id']! as int;
     }
 
     final price = _requiredInt(payload, 'salePriceCents', allowZero: true);
     final minimum = _requiredInt(payload, 'minimumStock', allowZero: true);
-    final rows = await tx.query('products', columns: ['id'], where: 'global_id = ? AND business_id = ?', whereArgs: [change.entityGlobalId, context.businessId], limit: 1);
+    final rows = await tx.query(
+      'products',
+      columns: ['id'],
+      where: 'global_id = ? AND business_id = ?',
+      whereArgs: [change.entityGlobalId, context.businessId],
+      limit: 1,
+    );
     final values = {
       'global_id': change.entityGlobalId,
       'business_id': context.businessId,
@@ -422,11 +568,20 @@ final class SyncRepository {
     } else {
       values.remove('global_id');
       values.remove('business_id');
-      await tx.update('products', values, where: 'id = ?', whereArgs: [rows.first['id']]);
+      await tx.update(
+        'products',
+        values,
+        where: 'id = ?',
+        whereArgs: [rows.first['id']],
+      );
     }
   }
 
-  Future<int> _localServerVersion(Transaction tx, String entityType, String globalId) async {
+  Future<int> _localServerVersion(
+    Transaction tx,
+    String entityType,
+    String globalId,
+  ) async {
     final table = switch (entityType) {
       'Business' => 'businesses',
       'Branch' => 'branches',
@@ -437,7 +592,13 @@ final class SyncRepository {
       'Product' => 'products',
       _ => throw StateError('Entidad pull no soportada: $entityType.'),
     };
-    final rows = await tx.query(table, columns: ['server_version'], where: 'global_id = ?', whereArgs: [globalId], limit: 1);
+    final rows = await tx.query(
+      table,
+      columns: ['server_version'],
+      where: 'global_id = ?',
+      whereArgs: [globalId],
+      limit: 1,
+    );
     return rows.isEmpty ? 0 : rows.first['server_version']! as int;
   }
 
@@ -447,26 +608,25 @@ final class SyncRepository {
     Map<String, Object?> pending,
   ) async {
     final now = DateTime.now().toUtc().toIso8601String();
-    await tx.insert(
-      'sync_conflicts',
-      {
-        'global_id': _ids.newId(),
-        'entity_type': change.entityType,
-        'entity_global_id': change.entityGlobalId,
-        'source': 'Pull',
-        'local_operation_global_id': pending['global_id'],
-        'local_payload_json': pending['payload_json'],
-        'remote_payload_json': jsonEncode(change.payload),
-        'remote_version': change.version,
-        'remote_cursor': change.cursor,
-        'detected_at': now,
-        'status': 'Pending',
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await tx.insert('sync_conflicts', {
+      'global_id': _ids.newId(),
+      'entity_type': change.entityType,
+      'entity_global_id': change.entityGlobalId,
+      'source': 'Pull',
+      'local_operation_global_id': pending['global_id'],
+      'local_payload_json': pending['payload_json'],
+      'remote_payload_json': jsonEncode(change.payload),
+      'remote_version': change.version,
+      'remote_cursor': change.cursor,
+      'detected_at': now,
+      'status': 'Pending',
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  Future<void> _recordPushConflict(Transaction tx, SyncOperationResult result) async {
+  Future<void> _recordPushConflict(
+    Transaction tx,
+    SyncOperationResult result,
+  ) async {
     final rows = await tx.query(
       'sync_queue',
       columns: ['global_id', 'entity_type', 'entity_global_id', 'payload_json'],
@@ -492,42 +652,59 @@ final class SyncRepository {
   }
 
   Future<int> _cursorInTransaction(Transaction tx) async {
-    final rows = await tx.query('app_settings', columns: ['value'], where: 'key = ?', whereArgs: ['sync_pull_cursor'], limit: 1);
+    final rows = await tx.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['sync_pull_cursor'],
+      limit: 1,
+    );
     if (rows.isEmpty) return 0;
     return int.tryParse(rows.first['value']! as String) ?? 0;
   }
 
-  static void _validateRemoteBusiness(SyncPullChange change, String localBusinessGlobalId) {
+  static void _validateRemoteBusiness(
+    SyncPullChange change,
+    String localBusinessGlobalId,
+  ) {
     final payloadBusiness = switch (change.entityType) {
       'Business' => change.payload['globalId'],
       _ => change.payload['businessGlobalId'],
     };
     if (payloadBusiness?.toString() != localBusinessGlobalId) {
-      throw StateError('El servidor devolvió un cambio perteneciente a otro negocio.');
+      throw StateError(
+        'El servidor devolvió un cambio perteneciente a otro negocio.',
+      );
     }
     if (change.payload['globalId']?.toString() != change.entityGlobalId) {
-      throw StateError('El payload remoto no coincide con el identificador del cambio.');
+      throw StateError(
+        'El payload remoto no coincide con el identificador del cambio.',
+      );
     }
     final payloadVersion = change.payload['serverVersion'];
     if (payloadVersion is! num || payloadVersion.toInt() != change.version) {
-      throw StateError('La versión del payload remoto no coincide con el cambio.');
+      throw StateError(
+        'La versión del payload remoto no coincide con el cambio.',
+      );
     }
   }
 
   static int _entityRank(String type) => switch (type) {
-        'Business' => 0,
-        'Branch' => 1,
-        'Device' => 2,
-        'User' => 3,
-        'Category' => 4,
-        'Supplier' => 5,
-        'Product' => 6,
-        _ => 99,
-      };
+    'Business' => 0,
+    'Branch' => 1,
+    'Device' => 2,
+    'User' => 3,
+    'Category' => 4,
+    'Supplier' => 5,
+    'Product' => 6,
+    _ => 99,
+  };
 
   static String _requiredString(Map<String, Object?> payload, String key) {
     final value = payload[key]?.toString().trim();
-    if (value == null || value.isEmpty) throw StateError('El campo remoto $key es obligatorio.');
+    if (value == null || value.isEmpty) {
+      throw StateError('El campo remoto $key es obligatorio.');
+    }
     return value;
   }
 
@@ -536,9 +713,15 @@ final class SyncRepository {
     return text == null || text.isEmpty ? null : text;
   }
 
-  static int _requiredInt(Map<String, Object?> payload, String key, {bool allowZero = false}) {
+  static int _requiredInt(
+    Map<String, Object?> payload,
+    String key, {
+    bool allowZero = false,
+  }) {
     final value = payload[key];
-    if (value is! num || value % 1 != 0 || (allowZero ? value < 0 : value <= 0)) {
+    if (value is! num ||
+        value % 1 != 0 ||
+        (allowZero ? value < 0 : value <= 0)) {
       throw StateError('El campo remoto $key debe ser un entero válido.');
     }
     return value.toInt();
@@ -546,13 +729,17 @@ final class SyncRepository {
 
   static int _boolInt(Map<String, Object?> payload, String key) {
     final value = payload[key];
-    if (value is! bool) throw StateError('El campo remoto $key debe ser booleano.');
+    if (value is! bool) {
+      throw StateError('El campo remoto $key debe ser booleano.');
+    }
     return value ? 1 : 0;
   }
 
   static String _requiredDate(Map<String, Object?> payload, String key) {
     final value = DateTime.tryParse(payload[key]?.toString() ?? '');
-    if (value == null) throw StateError('El campo remoto $key debe contener una fecha válida.');
+    if (value == null) {
+      throw StateError('El campo remoto $key debe contener una fecha válida.');
+    }
     return value.toUtc().toIso8601String();
   }
 

@@ -57,7 +57,7 @@ Implemented report families: executive summary, sales by day/week/month and page
 
 See `docs/REMOTE_REPORTS.md` for accounting definitions, period semantics and the current server cash-model limitation.
 
-## Flutter client
+## Flutter / Android client
 
 Location:
 
@@ -65,18 +65,85 @@ Location:
 client/pos_app
 ```
 
-When Flutter is installed, run from that directory:
+Validated on the canonical Windows working copy with:
+
+- Flutter 3.47.1 stable.
+- Dart 3.13.1.
+- DevTools 2.60.0.
+- Java 17.0.12.
+- Gradle 9.3.1.
+- Android Gradle Plugin 9.1.1.
+- Kotlin Gradle Plugin 2.4.0.
+- compileSdk 37.
+- targetSdk 36.
+- minSdk 24.
+- JVM target 17.
+- Gradle heap validated at 4 GB with 1 GB metaspace.
+- AndroidX enabled.
+- Jetifier disabled.
+- android.builtInKotlin=false.
+- android.newDsl=false.
+
+Actually executed:
 
 ```text
 flutter pub get
 flutter analyze
 flutter test
-flutter build apk --release
+flutter build apk --debug
 ```
 
-These commands were **not executed in the reconstruction runtime** because Flutter/Dart were unavailable.
+Results:
 
-The reconstructed Android source/config host intentionally does not include fabricated `gradlew`, `gradlew.bat` or `gradle-wrapper.jar`. See `docs/ANDROID_RECONSTRUCTION.md` before the first Android build.
+- flutter pub get: PASS.
+- flutter analyze: PASS, 0 issues.
+- flutter test: 22/22 PASS.
+- flutter build apk --debug: PASS.
+- Debug APK size: 190,927,071 bytes.
+- Debug APK SHA-256: `4E239606C37C4941E2BFAE041A8CEB8507CF5F0D416236955F3E29881EACE8E5`.
+
+Android runtime validation was executed on a Pixel Tablet AVD using Android 17 / API 37. The application successfully opened the real SQLite database and completed the offline-first operational flow without Internet connectivity.
+
+Validated offline flow:
+
+- first-run business, administrator and device creation;
+- local administrator login;
+- product and supplier creation;
+- two purchases creating FIFO lots;
+- cash-session opening;
+- complete cash sale;
+- inventory movement;
+- cash movement;
+- pending synchronization outbox;
+- force-stop and cold restart;
+- persistence verification after restart.
+
+Validated FIFO sale:
+
+- quantity sold: 7 integer units;
+- sale price: 15,000 cents per unit;
+- revenue: 105,000 cents;
+- FIFO cost: 60,000 cents;
+- gross profit: 45,000 cents;
+- lot 1: 5 units at 8,000 cents, fully consumed;
+- lot 2: 2 units at 10,000 cents consumed;
+- lot 2 remaining: 3 units;
+- final total stock: 3 units.
+
+The sale, FIFO allocations, stock, open cash session, cash movement and pending synchronization survived a force-stop and cold restart.
+
+A real SQLite Android runtime defect was found during validation. `PRAGMA journal_mode = WAL` failed when invoked through `execute`; it was corrected to use `rawQuery`. Runtime startup and the complete offline flow passed after the fix.
+
+The Android Gradle wrapper is now present and executable:
+
+- `android/gradlew`
+- `android/gradlew.bat`
+- `android/gradle/wrapper/gradle-wrapper.jar`
+
+Known tooling debt:
+
+- `cryptography_flutter` currently applies the Kotlin Gradle Plugin directly. Flutter warns that a future Flutter release will require Built-in Kotlin compatibility.
+- Production release signing and `flutter build apk --release` are not claimed as validated by this checkpoint.
 
 ## Backend
 
@@ -112,7 +179,7 @@ A real SQLite auxiliary gate is included:
 python3 tools/sqlite_validation.py
 ```
 
-It validates reconstructed v1→v2→v3 migration, preservation, FK/integrity, integer constraints, pull rollback/cursor, conflicts, enrollment retry identity and FIFO examples. This does not substitute for `flutter test`.
+It validates the reconstructed SQLite migrations, preservation, FK/integrity, integer constraints, pull rollback/cursor, conflicts, enrollment retry identity and FIFO examples. The current canonical checkpoint reports `SQLITE_VALIDATION=PASS`; Flutter tests and Android runtime validation were executed independently.
 
 ## Structural gate
 

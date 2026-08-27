@@ -35,3 +35,6 @@ __pycache__/
 *.bundle
 POSFlutter_GIT_BUNDLE_PACKAGE*.zip
 POSFlutter_RECONSTRUCTED_CANONICAL*.zip
+
+# Flutter generated Android plugin registrant
+client/pos_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java

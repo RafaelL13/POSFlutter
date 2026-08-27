@@ -166,13 +166,18 @@ miss=[x for x in android_required if not (android/x).exists()]
 if miss: fail('Android host',', '.join(miss))
 else:
     gradle=(android/'gradle/wrapper/gradle-wrapper.properties').read_text(); appgradle=(android/'app/build.gradle.kts').read_text(); settings=(android/'settings.gradle.kts').read_text()
-    expected=['gradle-9.3.1-bin.zip','com.android.application") version "9.1.0','org.jetbrains.kotlin.android") version "2.4.0','compileSdk = 36','targetSdk = 36','minSdk = 24','VERSION_17','namespace = "com.posflutter.pos_app"','applicationId = "com.posflutter.pos_app"']
+    expected=['gradle-9.3.1-bin.zip','com.android.application") version "9.1.1','org.jetbrains.kotlin.android") version "2.4.0','compileSdk = 37','targetSdk = 36','minSdk = 24','VERSION_17','namespace = "com.posflutter.pos_app"','applicationId = "com.posflutter.pos_app"']
     combined=gradle+'\n'+appgradle+'\n'+settings
     missing_cfg=[x for x in expected if x not in combined]
     if missing_cfg: fail('Android host','missing config: '+', '.join(missing_cfg))
-    else: ok('Android host','SOURCE/CONFIG RECONSTRUCTED; wrapper binaries intentionally pending; build not executed')
-for rel in ['gradlew','gradlew.bat','gradle/wrapper/gradle-wrapper.jar']:
-    if (android/rel).exists(): warn('Android wrapper provenance',f'{rel} unexpectedly exists; provenance must be verified')
+    else: ok('Android host','Gradle 9.3.1 + AGP 9.1.1 + KGP 2.4.0 + compileSdk 37 + targetSdk 36 + minSdk 24 + JVM 17')
+
+wrapper_required=['gradlew','gradlew.bat','gradle/wrapper/gradle-wrapper.jar']
+missing_wrapper=[rel for rel in wrapper_required if not (android/rel).exists()]
+if missing_wrapper:
+    fail('Android wrapper', 'missing required wrapper files: ' + ', '.join(missing_wrapper))
+else:
+    ok('Android wrapper', 'gradlew + gradlew.bat + gradle-wrapper.jar present')
 
 # Critical architecture semantics
 sync_cs=text('server/src/Infrastructure/SyncService.cs'); program=text('server/src/Api/Program.cs'); sync_dart=text('client/pos_app/lib/sync/sync_repository.dart'); dart_sync=text('client/pos_app/lib/sync/sync_service.dart')

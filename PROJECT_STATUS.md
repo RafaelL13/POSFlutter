@@ -1,10 +1,10 @@
 # POSFlutter — Project Status
 
-Date: 2026-08-26 (America/Mazatlan)
+Date: 2026-08-27 (America/Mazatlan)
 
 ## Canonical transition
 
-**CONTROLLED RECONSTRUCTION: COMPLETED / FASE 17 IMPLEMENTED / BACKEND SDK VALIDATED / FLUTTER SDK VALIDATION PENDING**
+**CONTROLLED RECONSTRUCTION: COMPLETED / FASE 17 CLOSED / BACKEND + FLUTTER + ANDROID OFFLINE RUNTIME VALIDATED**
 
 The original complete runtime and `.git` object database were lost before this reconstruction. Recovery was exhausted first; controlled reconstruction then rebuilt a coherent source tree while preserving authentic recovered files under `RECOVERY_EVIDENCE/` and recording provenance in `RECOVERY_MANIFEST.md`.
 
@@ -53,7 +53,7 @@ The new Git repository starts with a new reconstructed baseline. Its real hash i
 - Stable pending enrollment `DeviceGlobalId` persistence verified through close/reopen.
 - Auxiliary FIFO scenarios: 300 cost / 7 remaining; 440 cost / lot B 3 remaining; insufficient stock rejected.
 
-These auxiliary structural/SQLite checks do **not** replace Flutter/.NET compiler or test execution.
+The structural and SQLite gates are auxiliary checks and are now complemented by real Flutter analysis/tests/build, Android runtime execution and .NET compiler/xUnit validation.
 
 ## Windows backend SDK validation
 
@@ -66,19 +66,89 @@ Validated on the canonical Windows working copy with .NET SDK 10.0.303:
 - General infrastructure tests continue using SQLite where provider-specific SQL Server behavior is not required.
 - Build currently reports xUnit1051 cancellation-token analyzer warnings; these do not fail compilation or tests.
 
-## Still not executed due missing Flutter/Android tooling
+## Flutter / Android validation
 
-- `flutter pub get`
-- `flutter analyze`
-- `flutter test`
-- `flutter build apk --release`
-- Android Flutter/Gradle build
+Validated on the canonical Windows working copy:
 
-Flutter/Dart SDK validation remains pending. Backend xUnit validation is now **EXECUTED / 28 OF 28 PASS**.
+- Flutter 3.47.1 stable.
+- Dart 3.13.1.
+- DevTools 2.60.0.
+- Java 17.0.12.
+- flutter pub get: PASS.
+- flutter analyze: PASS, 0 issues.
+- flutter test: 22/22 PASS.
+- flutter build apk --debug: PASS.
+- Debug APK size: 190,927,071 bytes.
+- Debug APK SHA-256: `4E239606C37C4941E2BFAE041A8CEB8507CF5F0D416236955F3E29881EACE8E5`.
+- Gradle wrapper: 9.3.1.
+- AGP: 9.1.1.
+- KGP: 2.4.0.
+- compileSdk: 37.
+- targetSdk: 36.
+- minSdk: 24.
+- JVM target: 17.
+- Gradle memory validated at -Xmx4G / MaxMetaspaceSize=1G.
+- android.enableJetifier=false.
+- Pixel Tablet AVD, Android 17 / API 37.
+- SQLite Android runtime: PASS.
+- SQLite WAL mode: PASS.
+- Offline first-run business/admin/device creation: PASS.
+- Offline administrator login: PASS.
+- Offline product creation: PASS.
+- Offline supplier creation: PASS.
+- Two offline FIFO purchases: PASS.
+- Cash-session requirement before cash sale: PASS.
+- Offline cash-session opening: PASS.
+- Offline cash sale: PASS.
+- FIFO allocation and cost: PASS.
+- Inventory movement and final stock: PASS.
+- Cash movement: PASS.
+- Sale synchronization queue persistence: PASS.
+- Cash-session synchronization queue persistence: PASS.
+- Force-stop / cold restart persistence: PASS.
 
-## Android
+Validated sale arithmetic:
 
-Source/config host reconstructed. Standard wrapper executables/JAR are intentionally missing because official artifacts could not be obtained in this runtime. See `docs/ANDROID_RECONSTRUCTION.md`.
+- 7 units sold at 15,000 cents = 105,000 cents revenue.
+- FIFO allocation: 5 units at 8,000 cents + 2 units at 10,000 cents.
+- FIFO cost: 60,000 cents.
+- Gross profit: 45,000 cents.
+- Initial stock: 10.
+- Final stock: 3.
+
+Dashboard after restart reported:
+
+- Sales: $1,050.00.
+- Operations: 1.
+- FIFO cost: $600.00.
+- Gross profit: $450.00.
+- Expenses: $0.
+- Result: $450.00.
+
+A real Android SQLite compatibility defect was found and corrected: `PRAGMA journal_mode = WAL` must use `rawQuery` with the current sqflite implementation instead of `execute`.
+
+Known tooling debt:
+
+- `cryptography_flutter` applies KGP directly and produces a future Built-in Kotlin compatibility warning.
+- Production release signing and `flutter build apk --release` have not been validated in this checkpoint.
+
+## Final validation gates
+
+Executed after Flutter/Android stabilization:
+
+- `python tools/structural_gate.py` -> `STRUCTURAL_GATE=PASS`.
+- `HIGH_CONFIDENCE_SECRETS=0`.
+- Android host structural validation: PASS.
+- Android wrapper presence validation: PASS.
+- `python tools/sqlite_validation.py` -> `SQLITE_VALIDATION=PASS`.
+- SQLite integrity: ok.
+- Foreign keys: ok.
+- Data preservation: yes.
+- Rollback: verified.
+- Conflict handling: verified.
+- Integer constraints: verified.
+- Enrollment device identity: verified.
+- FIFO auxiliary scenarios: verified.
 
 ## Git policy from this baseline forward
 

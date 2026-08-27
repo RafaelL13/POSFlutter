@@ -195,7 +195,7 @@ class _ReportOptions extends StatelessWidget {
   Widget _selector(String label, String value, Map<String, String> values, ValueChanged<String> onChanged) => SizedBox(
         width: 210,
         child: DropdownButtonFormField<String>(
-          value: values.containsKey(value) ? value : values.keys.first,
+          initialValue: values.containsKey(value) ? value : values.keys.first,
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
           items: values.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
           onChanged: (next) { if (next != null) onChanged(next); },
@@ -205,7 +205,7 @@ class _ReportOptions extends StatelessWidget {
   Widget _selectorInt(String label, int value, List<int> values, ValueChanged<int> onChanged) => SizedBox(
         width: 140,
         child: DropdownButtonFormField<int>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
           items: values.map((entry) => DropdownMenuItem(value: entry, child: Text('$entry'))).toList(),
           onChanged: (next) { if (next != null) onChanged(next); },
@@ -255,7 +255,7 @@ class _DimensionFilters extends StatelessWidget {
   Widget _dropdown(String label, String? value, List<RemoteReportOption> items, ValueChanged<String?> onChanged) => SizedBox(
         width: 260,
         child: DropdownButtonFormField<String?>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
           items: [
             const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
