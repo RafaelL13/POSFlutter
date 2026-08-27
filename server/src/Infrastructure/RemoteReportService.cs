@@ -357,7 +357,25 @@ public sealed class RemoteReportService(PosDbContext db)
         var total = await expenses.SumAsync(x => (long?)x.AmountCents,ct) ?? 0; var count = await expenses.CountAsync(ct);
         IReadOnlyList<ExpenseBreakdownRow> breakdown;
         if (groupBy == "category")
-            breakdown = await expenses.GroupBy(x => x.Category ?? "Sin categoría").Select(g => new ExpenseBreakdownRow(g.Key,g.Sum(x => x.AmountCents),g.Count())).OrderByDescending(x => x.AmountCents).ToListAsync(ct);
+        {
+            var grouped = await expenses
+                .GroupBy(x => x.Category)
+                .Select(g => new
+                {
+                    Category = g.Key,
+                    AmountCents = g.Sum(x => x.AmountCents),
+                    Count = g.Count()
+                })
+                .OrderByDescending(x => x.AmountCents)
+                .ToListAsync(ct);
+
+            breakdown = grouped
+                .Select(x => new ExpenseBreakdownRow(
+                    x.Category ?? "Sin categoría",
+                    x.AmountCents,
+                    x.Count))
+                .ToList();
+        }
         else
         {
             var daily = await expenses.GroupBy(x => new { x.ExpenseDate.Year,x.ExpenseDate.Month,x.ExpenseDate.Day }).Select(g => new { g.Key.Year,g.Key.Month,g.Key.Day,Amount = g.Sum(x => x.AmountCents),Count = g.Count() }).ToListAsync(ct);

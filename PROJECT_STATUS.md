@@ -4,7 +4,7 @@ Date: 2026-08-26 (America/Mazatlan)
 
 ## Canonical transition
 
-**CONTROLLED RECONSTRUCTION: COMPLETED / FASE 17 IMPLEMENTED / SDK VALIDATION PENDING**
+**CONTROLLED RECONSTRUCTION: COMPLETED / FASE 17 IMPLEMENTED / BACKEND SDK VALIDATED / FLUTTER SDK VALIDATION PENDING**
 
 The original complete runtime and `.git` object database were lost before this reconstruction. Recovery was exhausted first; controlled reconstruction then rebuilt a coherent source tree while preserving authentic recovered files under `RECOVERY_EVIDENCE/` and recording provenance in `RECOVERY_MANIFEST.md`.
 
@@ -55,19 +55,26 @@ The new Git repository starts with a new reconstructed baseline. Its real hash i
 
 These auxiliary structural/SQLite checks do **not** replace Flutter/.NET compiler or test execution.
 
-## Written but NOT executed due missing SDK/tooling
+## Windows backend SDK validation
+
+Validated on the canonical Windows working copy with .NET SDK 10.0.303:
+
+- `dotnet restore Pos.Server.sln` ? PASS.
+- `dotnet build Pos.Server.sln --no-restore` ? PASS.
+- `dotnet test Pos.Server.sln --no-build` ? **28/28 PASS, 0 failed, 0 skipped**.
+- FASE 17 remote-report integration tests run against isolated SQL Server LocalDB databases.
+- General infrastructure tests continue using SQLite where provider-specific SQL Server behavior is not required.
+- Build currently reports xUnit1051 cancellation-token analyzer warnings; these do not fail compilation or tests.
+
+## Still not executed due missing Flutter/Android tooling
 
 - `flutter pub get`
 - `flutter analyze`
 - `flutter test`
 - `flutter build apk --release`
-- `dotnet restore`
-- `dotnet build`
-- `dotnet test`
-- `dotnet ef migrations ...`
-- Android Gradle build
+- Android Flutter/Gradle build
 
-Flutter tests and backend xUnit tests, including FASE 17 report tests, are **WRITTEN / NOT EXECUTED**.
+Flutter/Dart SDK validation remains pending. Backend xUnit validation is now **EXECUTED / 28 OF 28 PASS**.
 
 ## Android
 

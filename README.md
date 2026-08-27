@@ -94,7 +94,13 @@ dotnet build
 dotnet test
 ```
 
-These commands were **not executed in the reconstruction runtime** because the .NET SDK was unavailable.
+The reconstructed runtime originally lacked the .NET SDK. The canonical Windows working copy was later validated with .NET SDK 10.0.303:
+
+- restore: PASS
+- build: PASS
+- tests: **28/28 PASS**
+
+FASE 17 report integration tests use isolated SQL Server LocalDB databases so SQL Server-specific LINQ translation is tested against the production database provider.
 
 Required secrets/configuration must be supplied externally, for example through environment variables/User Secrets. Do not commit SQL passwords or JWT signing keys.
 

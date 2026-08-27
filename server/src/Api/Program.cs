@@ -43,13 +43,13 @@ app.MapPost("/api/bootstrap",async(BootstrapRequest r,PosDbContext db,TokenServi
  await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);
  var existing=await db.Businesses.SingleOrDefaultAsync(x=>x.GlobalId==r.BusinessGlobalId,ct);
  if(existing is not null){
-   var exact=await (from b in db.Businesses where b.GlobalId==r.BusinessGlobalId
-                    join br in db.Branches on b.Id equals br.BusinessId
-                    join d in db.Devices on br.Id equals d.BranchId
-                    join u in db.Users on b.Id equals u.BusinessId
-                    where br.GlobalId==r.BranchGlobalId && d.GlobalId==r.DeviceGlobalId && u.GlobalId==r.UserGlobalId &&
-                          u.Username==r.Username && u.PasswordHash==r.PasswordHash && u.PasswordSalt==r.PasswordSalt
-                    select new {b,br,d,u}).SingleOrDefaultAsync(ct);
+   var exact=await (from existingBusiness in db.Businesses where existingBusiness.GlobalId==r.BusinessGlobalId
+                    join existingBranch in db.Branches on existingBusiness.Id equals existingBranch.BusinessId
+                    join existingDevice in db.Devices on existingBranch.Id equals existingDevice.BranchId
+                    join existingUser in db.Users on existingBusiness.Id equals existingUser.BusinessId
+                    where existingBranch.GlobalId==r.BranchGlobalId && existingDevice.GlobalId==r.DeviceGlobalId && existingUser.GlobalId==r.UserGlobalId &&
+                          existingUser.Username==r.Username && existingUser.PasswordHash==r.PasswordHash && existingUser.PasswordSalt==r.PasswordSalt
+                    select new {b=existingBusiness,br=existingBranch,d=existingDevice,u=existingUser}).SingleOrDefaultAsync(ct);
    if(exact is null){await tx.RollbackAsync(ct);return Results.Conflict();}
    var recovered=await tokens.IssueForBootstrapAsync(exact.b.GlobalId,exact.br.GlobalId,exact.d.GlobalId,exact.u.GlobalId,ct);
    await tx.CommitAsync(ct); return recovered is null?Results.Conflict():Results.Ok(recovered);
