@@ -4,6 +4,9 @@ import 'package:pos_app/features/backup/presentation/backup_screen.dart';
 import 'package:pos_app/features/cash/presentation/cash_screen.dart';
 import 'package:pos_app/features/categories/presentation/categories_screen.dart';
 import 'package:pos_app/features/cloud_admin/presentation/cloud_admin_screen.dart';
+import 'package:pos_app/features/cloud_admin/reports/data/remote_report_repository.dart';
+import 'package:pos_app/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart';
+import 'package:pos_app/features/cloud_admin/reports/presentation/remote_reports_screen.dart';
 import 'package:pos_app/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:pos_app/features/expenses/presentation/expenses_screen.dart';
 import 'package:pos_app/features/first_run/presentation/first_run_screen.dart';
@@ -33,4 +36,6 @@ final appRouter = GoRouter(initialLocation:'/first-run',routes:[
   GoRoute(path:'/users',builder:(_,__)=>const UsersScreen()),
   GoRoute(path:'/backup',builder:(_,__)=>const BackupScreen()),
   GoRoute(path:'/cloud-admin',builder:(_,__)=>const CloudAdminScreen()),
+  GoRoute(path:'/cloud-admin/reports',builder:(_,__)=>const RemoteReportsScreen()),
+  GoRoute(path:'/cloud-admin/reports/:kind',builder:(_,state){final name=state.pathParameters['kind'];RemoteReportKind? kind;for(final candidate in RemoteReportKind.values){if(candidate.name==name){kind=candidate;break;}}return kind==null?const RemoteReportsScreen():RemoteReportDetailScreen(kind:kind);}),
 ]);

@@ -64,3 +64,8 @@ Then add the real private remote and push using the commands above.
 ## Safety rules
 
 Do not use `git push --force`, `git reset --hard`, or destructive cleaning simply to resolve divergence. Inspect the local/remote history first. After every logical phase: validate, commit, push if `origin` is configured, refresh the Git bundle, and create a clean ZIP checkpoint.
+
+
+## Canonical remote now configured
+
+The canonical private remote is `https://github.com/RafaelL13/POSFlutter.git` on branch `main`. The FASE 17 starting checkpoint is `ee1c8f78b0f6e446f75b0b1a5ce7af79010aea97`. Bundles and ZIP checkpoints belong outside the working tree.

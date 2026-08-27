@@ -15,7 +15,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(o=>o.AddPolicy("Administrator",p=>p.RequireRole("Administrator")));
 builder.Services.AddRateLimiter(o=>
@@ -84,5 +84,89 @@ app.MapGet("/api/expenses",async(HttpContext h,TenantReadService r,CancellationT
 app.MapGet("/api/cash/sessions",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
 app.MapGet("/api/cash",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
 app.MapGet("/api/users",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.UsersAsync(T(h),ct)})).RequireAuthorization();
+
+var reportApi=app.MapGroup("/api/admin/reports").RequireAuthorization("Administrator");
+reportApi.MapGet("/summary",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period. Use from inclusive and to exclusive, maximum 366 days."});
+ return Results.Ok(await r.SummaryAsync(T(h),period,ct));
+});
+reportApi.MapGet("/sales",async(DateTimeOffset? from,DateTimeOffset? to,string? groupBy,Guid? userGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ try{return Results.Ok(new{items=await r.SalesAsync(T(h),period,groupBy??"day",ct,userGlobalId)});}catch(ArgumentException ex){return Results.BadRequest(new{message=ex.Message});}
+});
+reportApi.MapGet("/sales/details",async(DateTimeOffset? from,DateTimeOffset? to,int? page,int? pageSize,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(await r.SaleDetailsAsync(T(h),period,page??1,pageSize??50,ct));
+});
+reportApi.MapGet("/products",async(DateTimeOffset? from,DateTimeOffset? to,string? sortBy,bool? descending,int? top,Guid? productGlobalId,Guid? categoryGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await r.ProductsAsync(T(h),period,sortBy??"revenue",descending??true,top??20,ct,productGlobalId,categoryGlobalId)});
+});
+reportApi.MapGet("/products/low-performance",async(DateTimeOffset? from,DateTimeOffset? to,string? metric,int? top,Guid? productGlobalId,Guid? categoryGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{metric=metric??"revenue",definition="revenue=lowest revenue; units=lowest units; no-sales=no transactions; negative-margin=gross profit below zero",items=await r.LowPerformanceAsync(T(h),period,metric??"revenue",top??20,ct,productGlobalId,categoryGlobalId)});
+});
+reportApi.MapGet("/categories",async(DateTimeOffset? from,DateTimeOffset? to,Guid? categoryGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await r.CategoriesAsync(T(h),period,ct,categoryGlobalId)});
+});
+reportApi.MapGet("/users",async(DateTimeOffset? from,DateTimeOffset? to,Guid? userGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await r.UsersAsync(T(h),period,ct,userGlobalId)});
+});
+reportApi.MapGet("/purchases",async(DateTimeOffset? from,DateTimeOffset? to,string? groupBy,Guid? supplierGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ try{return Results.Ok(new{items=await r.PurchasesAsync(T(h),period,groupBy??"supplier",ct,supplierGlobalId)});}catch(ArgumentException ex){return Results.BadRequest(new{message=ex.Message});}
+});
+reportApi.MapGet("/suppliers",async(DateTimeOffset? from,DateTimeOffset? to,Guid? supplierGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await r.SuppliersAsync(T(h),period,ct,supplierGlobalId)});
+});
+reportApi.MapGet("/inventory",async(Guid? productGlobalId,Guid? categoryGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>Results.Ok(new{items=await r.InventoryAsync(T(h),ct,productGlobalId,categoryGlobalId)}));
+reportApi.MapGet("/expenses",async(DateTimeOffset? from,DateTimeOffset? to,string? groupBy,int? page,int? pageSize,Guid? userGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ try{return Results.Ok(await r.ExpensesAsync(T(h),period,groupBy??"category",page??1,pageSize??50,ct,userGlobalId));}catch(ArgumentException ex){return Results.BadRequest(new{message=ex.Message});}
+});
+reportApi.MapGet("/cash",async(DateTimeOffset? from,DateTimeOffset? to,int? page,int? pageSize,Guid? userGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(await r.CashAsync(T(h),period,page??1,pageSize??50,ct,userGlobalId));
+});
+reportApi.MapGet("/payment-methods",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await r.PaymentMethodsAsync(T(h),period,ct)});
+});
+reportApi.MapGet("/cancellations",async(DateTimeOffset? from,DateTimeOffset? to,int? page,int? pageSize,Guid? userGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(await r.CancellationsAsync(T(h),period,page??1,pageSize??50,ct,userGlobalId));
+});
+reportApi.MapGet("/trends/products",async(DateTimeOffset? from,DateTimeOffset? to,int? top,Guid? productGlobalId,Guid? categoryGlobalId,HttpContext h,RemoteReportService r,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{stableThresholdPercent=5.0,comparison="current period versus immediately preceding equal-length period",items=await r.ProductTrendsAsync(T(h),period,top??50,ct,productGlobalId,categoryGlobalId)});
+});
+
 app.Run();
+
+static bool TryReportPeriod(DateTimeOffset? from,DateTimeOffset? to,out ReportPeriod period)
+{
+ var end=(to??DateTimeOffset.UtcNow).ToUniversalTime();
+ var start=(from??new DateTimeOffset(end.UtcDateTime.Date,TimeSpan.Zero)).ToUniversalTime();
+ var span=end-start;
+ if(span<=TimeSpan.Zero||span>TimeSpan.FromDays(366)){period=new ReportPeriod(start,end);return false;}
+ period=new ReportPeriod(start,end);return true;
+}
+
 public partial class Program { }

@@ -1,10 +1,10 @@
 # POSFlutter — Project Status
 
-Date: 2026-08-25 (America/Mazatlan)
+Date: 2026-08-26 (America/Mazatlan)
 
 ## Canonical transition
 
-**CONTROLLED RECONSTRUCTION: COMPLETED / STRUCTURALLY VALIDATED**
+**CONTROLLED RECONSTRUCTION: COMPLETED / FASE 17 IMPLEMENTED / SDK VALIDATION PENDING**
 
 The original complete runtime and `.git` object database were lost before this reconstruction. Recovery was exhausted first; controlled reconstruction then rebuilt a coherent source tree while preserving authentic recovered files under `RECOVERY_EVIDENCE/` and recording provenance in `RECOVERY_MANIFEST.md`.
 
@@ -34,10 +34,13 @@ The new Git repository starts with a new reconstructed baseline. Its real hash i
 - Multi-tenant isolation derived from signed/authenticated context.
 - Tenant-safe remote administration reads.
 - FASE 16 `PointOfSale` / `AdminReadOnly` device modes and secure enrollment with hashed one-time invitations, expiry/revocation, Administrator reauthentication, cross-tenant rejection, IP rate limit and idempotent retry using stable `DeviceGlobalId`.
+- FASE 17 tenant-safe remote reports: executive summary, sales periods/details, product/category/user performance, purchases/suppliers, FIFO-valued inventory, expenses, cash sessions, payment methods, cancellations, product trends, tenant-safe `GlobalId` dimension filters, remote CSV and tablet cloud-admin presentation.
+- Remote report API is GET-only under `/api/admin/reports`, protected by `Administrator`; tenant authority remains claim-derived.
+- Remote FIFO cost comes from persisted `SaleLotAllocation`; inventory valuation comes from remaining `InventoryLot` quantities. See `docs/REMOTE_REPORTS.md`.
 
 ## Actually executed in this runtime
 
-- `python3 tools/structural_gate.py` → `STRUCTURAL_GATE=PASS`.
+- `python3 tools/structural_gate.py` → `STRUCTURAL_GATE=PASS` after FASE 17 additions.
 - High-confidence secret scan → `0` findings.
 - Dart local import resolution → `0` unresolved local imports.
 - JSON/YAML/XML/project/solution/reference checks → passed by structural gate.
@@ -64,7 +67,7 @@ These auxiliary structural/SQLite checks do **not** replace Flutter/.NET compile
 - `dotnet ef migrations ...`
 - Android Gradle build
 
-Flutter tests and backend xUnit tests are **WRITTEN / NOT EXECUTED**.
+Flutter tests and backend xUnit tests, including FASE 17 report tests, are **WRITTEN / NOT EXECUTED**.
 
 ## Android
 
@@ -72,11 +75,11 @@ Source/config host reconstructed. Standard wrapper executables/JAR are intention
 
 ## Git policy from this baseline forward
 
-1. private Git remote — intended canonical source once configured;
+1. private Git remote `https://github.com/RafaelL13/POSFlutter.git` — canonical source;
 2. local Git working copy;
 3. verified Git bundle;
 4. downloadable ZIP checkpoint;
 5. ChatGPT File Library as additional backup;
 6. runtime filesystem only as temporary execution space.
 
-No FASE 17 work belongs to this baseline operation.
+FASE 17 development starts from canonical checkpoint `ee1c8f78b0f6e446f75b0b1a5ce7af79010aea97`. FASE 18 is not started by this phase.

@@ -49,6 +49,14 @@ Flutter never connects directly to SQL Server. Google Drive or other object stor
 - Business tenant is derived from authenticated server context, never trusted from an arbitrary client `BusinessId`.
 - `AdminReadOnly` may authenticate/pull/read cloud data but cannot perform operational push/write actions server-side.
 
+## Remote reports — FASE 17
+
+Remote reports are separate from offline local reports. The cloud-admin client calls GET-only `/api/admin/reports/*` endpoints through ASP.NET Core; Flutter never connects to SQL Server and never sends an authoritative `BusinessId`. The server derives tenancy from authenticated claims.
+
+Implemented report families: executive summary, sales by day/week/month and paged detail, products/low performance, categories, sellers, purchases, suppliers, current FIFO-valued inventory, expenses, cash sessions, payment methods, cancellations and product trends. Date presets plus tenant-safe `GlobalId` filters cover product/category/supplier/user where semantically applicable. Historical cost uses persisted sale-to-lot allocations; current inventory value uses remaining lot quantities.
+
+See `docs/REMOTE_REPORTS.md` for accounting definitions, period semantics and the current server cash-model limitation.
+
 ## Flutter client
 
 Location:

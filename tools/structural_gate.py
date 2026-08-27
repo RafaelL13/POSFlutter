@@ -27,7 +27,7 @@ def functional_files():
 def text(path:str)->str: return (ROOT/path).read_text(encoding='utf-8')
 
 # Required graph
-required=['client/pos_app/pubspec.yaml','client/pos_app/analysis_options.yaml','client/pos_app/lib/main.dart','client/pos_app/lib/app/app.dart','client/pos_app/lib/app/router.dart','client/pos_app/lib/database/app_database.dart','client/pos_app/lib/database/schema_v1.dart','client/pos_app/lib/database/schema_v2.dart','client/pos_app/lib/database/schema_v3.dart','client/pos_app/lib/sync/sync_repository.dart','client/pos_app/lib/sync/sync_service.dart','server/Pos.Server.sln','server/src/Api/Api.csproj','server/src/Application/Application.csproj','server/src/Domain/Domain.csproj','server/src/Infrastructure/Infrastructure.csproj','server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj','server/src/Api/Program.cs','server/src/Application/Contracts.cs','server/src/Application/Abstractions.cs','server/src/Domain/Entities.cs','server/src/Infrastructure/PosDbContext.cs','server/src/Infrastructure/SyncService.cs','server/src/Infrastructure/DeviceEnrollmentService.cs','server/src/Infrastructure/TenantReadService.cs','server/src/Infrastructure/JwtTokenService.cs']
+required=['client/pos_app/pubspec.yaml','client/pos_app/analysis_options.yaml','client/pos_app/lib/main.dart','client/pos_app/lib/app/app.dart','client/pos_app/lib/app/router.dart','client/pos_app/lib/database/app_database.dart','client/pos_app/lib/database/schema_v1.dart','client/pos_app/lib/database/schema_v2.dart','client/pos_app/lib/database/schema_v3.dart','client/pos_app/lib/sync/sync_repository.dart','client/pos_app/lib/sync/sync_service.dart','server/Pos.Server.sln','server/src/Api/Api.csproj','server/src/Application/Application.csproj','server/src/Domain/Domain.csproj','server/src/Infrastructure/Infrastructure.csproj','server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj','server/src/Api/Program.cs','server/src/Application/Contracts.cs','server/src/Application/Abstractions.cs','server/src/Domain/Entities.cs','server/src/Infrastructure/PosDbContext.cs','server/src/Infrastructure/SyncService.cs','server/src/Infrastructure/DeviceEnrollmentService.cs','server/src/Infrastructure/TenantReadService.cs','server/src/Infrastructure/RemoteReportService.cs','server/src/Infrastructure/JwtTokenService.cs','server/src/Application/ReportContracts.cs','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_models.dart','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_repository.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_reports_screen.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart']
 missing=[x for x in required if not (ROOT/x).exists()]
 if missing: fail('required graph',', '.join(missing))
 else: ok('required graph',f'{len(required)} required paths present')
@@ -211,6 +211,46 @@ enrollment_checks={'256-bit token':'RandomNumberGenerator.GetBytes(32)' in ens,'
 missing_enroll=[k for k,v in enrollment_checks.items() if not v]
 if missing_enroll: fail('FASE16 enrollment',', '.join(missing_enroll))
 else: ok('FASE16 enrollment','token/hash/expiry/revocation/admin/serializable/idempotency/rate-limit/device-mode checks present')
+
+
+# FASE17 remote reports: explicit admin-only read surface, tenant filters, historical FIFO and client read-only queries.
+report_service=text('server/src/Infrastructure/RemoteReportService.cs')
+report_contracts=text('server/src/Application/ReportContracts.cs')
+remote_repo=text('client/pos_app/lib/features/cloud_admin/reports/data/remote_report_repository.dart')
+remote_screen=text('client/pos_app/lib/features/cloud_admin/reports/presentation/remote_reports_screen.dart')
+remote_detail=text('client/pos_app/lib/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart')
+report_routes=['/summary','/sales','/sales/details','/products','/products/low-performance','/categories','/users','/purchases','/suppliers','/inventory','/expenses','/cash','/payment-methods','/cancellations','/trends/products']
+missing_report_routes=[x for x in report_routes if f'reportApi.MapGet("{x}"' not in program]
+if 'app.MapGroup("/api/admin/reports").RequireAuthorization("Administrator")' not in program:
+    fail('FASE17 report authorization','remote report group must require Administrator policy')
+elif missing_report_routes:
+    fail('FASE17 report routes','missing '+', '.join(missing_report_routes))
+else:
+    ok('FASE17 report routes',f'{len(report_routes)} Administrator-only read endpoints')
+report_tenant_ok=(report_service.count('tenant.BusinessId')>=18 and 'Tenant context is not active.' in report_service and 'business.Id == tenant.BusinessId' in report_service)
+if not report_tenant_ok: fail('FASE17 tenant isolation','report service lacks pervasive claim-derived BusinessId scoping')
+else: ok('FASE17 tenant isolation','report queries scoped by authenticated tenant context')
+fifo_ok=('SaleLotAllocations' in report_service and 'allocation.TotalCostCents' in report_service and 'AvailableQuantity' in report_service and 'UnitCostCents' in report_service)
+if not fifo_ok: fail('FASE17 FIFO reporting','historical allocation cost and remaining lot valuation patterns missing')
+else: ok('FASE17 FIFO reporting','historical SaleLotAllocation cost + remaining lot valuation present')
+report_contract_names=['RemoteSummaryReport','SalesPeriodRow','ProductPerformanceRow','CategoryPerformanceRow','UserPerformanceRow','PurchaseReportRow','SupplierPerformanceRow','InventoryReportRow','ExpenseReportResponse','CashReportRow','PaymentMethodReportRow','CancellationReportResponse','ProductTrendRow']
+missing_contracts=[x for x in report_contract_names if x not in report_contracts]
+if missing_contracts: fail('FASE17 report contracts',', '.join(missing_contracts))
+else: ok('FASE17 report contracts',f'{len(report_contract_names)} explicit DTO contracts')
+if 'businessId' in remote_repo or 'BusinessId' in remote_repo: fail('FASE17 Flutter tenant authority','remote report client must not send BusinessId')
+elif '/api/admin/reports/summary' not in remote_repo or '/cloud-admin/reports' not in text('client/pos_app/lib/app/router.dart'): fail('FASE17 Flutter routing','remote report repository/router wiring missing')
+else: ok('FASE17 Flutter routing','cloud admin reports use tenant-free GET queries and dedicated routes')
+if '_api.post' in remote_repo: fail('FASE17 report read-only client','remote report repository contains mutation call')
+else: ok('FASE17 report read-only client','remote report repository performs GET-only reads')
+dimension_keys=['productGlobalId','categoryGlobalId','supplierGlobalId','userGlobalId']
+if not all(key in remote_repo and key in program for key in dimension_keys) or 'businessId' in remote_repo or 'BusinessId' in remote_repo:
+    fail('FASE17 dimension filters','tenant-free GlobalId report filters are incomplete')
+else:
+    ok('FASE17 dimension filters','product/category/supplier/user filters use GlobalId without client BusinessId authority')
+if not all(x in remote_detail for x in ['RemoteReportCsvService','DataTable','LinearProgressIndicator']): fail('FASE17 report presentation','table/chart/export wiring incomplete')
+else: ok('FASE17 report presentation','tablet table + lightweight chart + CSV export present')
+if 'StableThresholdPercent = 5.0' not in report_service or 'current period versus immediately preceding equal-length period' not in program: fail('FASE17 trend definition','stable threshold or comparison definition missing')
+else: ok('FASE17 trend definition','Stable threshold ±5% revenue; equal-length previous period documented')
 
 # EF model required entities/indexes
 entities=text('server/src/Domain/Entities.cs')
