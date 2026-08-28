@@ -130,7 +130,27 @@ A real Android SQLite compatibility defect was found and corrected: `PRAGMA jour
 Known tooling debt:
 
 - `cryptography_flutter` applies KGP directly and produces a future Built-in Kotlin compatibility warning.
-- Production release signing and `flutter build apk --release` have not been validated in this checkpoint.
+- AGP reports `android.builtInKotlin=false`, `android.newDsl=false` and direct Kotlin Gradle Plugin usage as future compatibility debt. These warnings did not block the current release build and are not treated as current release blockers.
+
+Android release signing checkpoint:
+
+- Release no longer falls back to debug signing.
+- Release signing accepts externally supplied `android/key.properties` values or `POSFLUTTER_RELEASE_*` environment variables.
+- Release fails closed when required signing values are missing.
+- The real release keystore is external to Git; no keystore or signing-password file is tracked.
+- Real `flutter build apk --release`: PASS.
+- Release APK size: 54,355,382 bytes.
+- Release APK SHA-256: `772A83905B89DB559EE9693238712B8170069B0C66A8FACF487097C37B1A921B`.
+- `apksigner verify`: PASS.
+- APK signing certificate SHA-256: `1190414E227223377C1DAB5C199A0C3ECA70B57F193B27F82BE082C97843EFC4`.
+- Signing environment cleanup: PASS; `POSFLUTTER_RELEASE_*` variables were removed after validation.
+- Post-release Flutter analyze: PASS.
+- Post-release Flutter tests: 22/22 PASS.
+- Post-release backend build: PASS.
+- Post-release backend tests: 28/28 PASS.
+- Post-signing structural gate: PASS with `HIGH_CONFIDENCE_SECRETS=0`.
+- Post-signing SQLite validation: PASS.
+- This validates the Android signing microcheckpoint only. It does not claim final production deployment, production API configuration, rollout, AAB publication or production readiness closure.
 
 ## Final validation gates
 

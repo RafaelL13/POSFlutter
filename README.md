@@ -143,7 +143,20 @@ The Android Gradle wrapper is now present and executable:
 Known tooling debt:
 
 - `cryptography_flutter` currently applies the Kotlin Gradle Plugin directly. Flutter warns that a future Flutter release will require Built-in Kotlin compatibility.
-- Production release signing and `flutter build apk --release` are not claimed as validated by this checkpoint.
+- The current AGP/Kotlin Built-in Kotlin warnings are classified as future technical debt / plugin dependency; they did not block the validated release build.
+- Android release signing is configured without debug-signing fallback. Release credentials are supplied externally through ignored `android/key.properties` or `POSFLUTTER_RELEASE_*` environment variables.
+- The release keystore is stored outside the repository. No `.jks`, `.keystore` or `key.properties` file is tracked by Git.
+- `flutter build apk --release`: PASS.
+- Release APK: `build/app/outputs/flutter-apk/app-release.apk`.
+- Release APK size: 54,355,382 bytes.
+- Release APK SHA-256: `772A83905B89DB559EE9693238712B8170069B0C66A8FACF487097C37B1A921B`.
+- Android `apksigner` verification: PASS using APK Signature Scheme v2.
+- Release certificate SHA-256: `1190414E227223377C1DAB5C199A0C3ECA70B57F193B27F82BE082C97843EFC4`.
+- Post-release Flutter validation: `flutter analyze` PASS and 22/22 tests PASS.
+- Post-release backend validation: build PASS and 28/28 tests PASS.
+- Post-signing structural validation: `STRUCTURAL_GATE=PASS`, `HIGH_CONFIDENCE_SECRETS=0`.
+- Post-signing SQLite validation: `SQLITE_VALIDATION=PASS`.
+- The release APK is a signing-validation artifact, not yet a final production rollout artifact; production environment configuration and deployment remain separate work.
 
 ## Backend
 
