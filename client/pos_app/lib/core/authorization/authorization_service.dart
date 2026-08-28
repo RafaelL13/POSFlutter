@@ -103,4 +103,10 @@ final class AuthorizationService {
       return const EffectiveCapabilities.denied();
     }
   }
+
+  Future<EffectiveCapabilities> require(Capability capability) async {
+    final effective = await load();
+    effective.require(capability);
+    return effective;
+  }
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:pos_app/core/authorization/authorization_service.dart';
+import 'package:pos_app/core/authorization/capability.dart';
 import 'package:pos_app/core/context/local_app_context.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
@@ -15,6 +17,7 @@ final class SyncRepository {
   final IdGenerator _ids;
 
   Future<List<SyncOperationRecord>> nextBatch({int limit = 50}) async {
+    await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     final now = DateTime.now().toUtc().toIso8601String();
     final rows = await db.query(
@@ -29,6 +32,7 @@ final class SyncRepository {
 
   Future<void> markSyncing(List<SyncOperationRecord> operations) async {
     if (operations.isEmpty) return;
+    await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     final now = DateTime.now().toUtc().toIso8601String();
     final batch = db.batch();
@@ -45,6 +49,7 @@ final class SyncRepository {
 
   Future<void> applyResults(List<SyncOperationResult> results) async {
     if (results.isEmpty) return;
+    await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.transaction((tx) async {
       for (final result in results) {
@@ -102,6 +107,7 @@ final class SyncRepository {
     String message,
   ) async {
     if (operations.isEmpty) return;
+    await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.transaction((tx) async {
       for (final operation in operations) {
@@ -123,6 +129,7 @@ final class SyncRepository {
   }
 
   Future<void> recoverInterrupted() async {
+    await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.rawUpdate(
       "UPDATE sync_queue SET status = 'Pending', error_message = 'Reintento después de cierre inesperado.' WHERE status = 'Syncing'",
@@ -151,7 +158,9 @@ final class SyncRepository {
   }
 
   Future<void> applyPullBatch(SyncPullBatch batch) async {
-    final context = await LocalAppContext.load(_database);
+    final authorization = await AuthorizationService(_database)
+        .require(Capability.syncPull);
+    final context = authorization.context!;
     final db = await _database.open();
     await db.transaction((tx) async {
       final current = await _cursorInTransaction(tx);

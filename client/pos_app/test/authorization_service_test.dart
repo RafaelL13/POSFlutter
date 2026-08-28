@@ -61,6 +61,23 @@ void main() {
       expect(authorization.can(Capability.syncPull), isTrue);
       expect(authorization.can(Capability.syncPush), isFalse);
     });
+
+    test(
+      'require returns valid context only when capability is direct',
+      () async {
+        final service = AuthorizationService.fromContextLoader(
+          () async => _context(role: 'Seller'),
+        );
+
+        final authorization = await service.require(Capability.saleCreate);
+
+        expect(authorization.context?.userGlobalId, 'user-1');
+        expect(
+          () => service.require(Capability.purchaseCreate),
+          throwsA(isA<AuthorizationDeniedException>()),
+        );
+      },
+    );
   });
 
   group('EffectiveCapabilities.require', () {

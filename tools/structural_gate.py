@@ -207,9 +207,17 @@ else: ok('AdminReadOnly pull','authenticated pull allowed without PointOfSale-on
 # SQLite atomic cursor
 if not ('db.transaction((tx) async' in sync_dart and "'sync_pull_cursor'" in sync_dart and 'batch.nextCursor.toString()' in sync_dart): fail('SQLite pull transaction','pull application/cursor transaction pattern missing')
 else: ok('SQLite pull transaction','remote changes and nextCursor committed in one SQLite transaction')
-# Client advisory guard
-if not re.search(r'if\s*\(\s*!ctx\.isAdminReadOnly\s*\)',dart_sync): fail('AdminReadOnly client push guard','client skip-push advisory guard missing')
-else: ok('AdminReadOnly client push guard','client skips operational push; server remains authority')
+# Client guard must use the central capability model: pull is required first,
+# while operational push executes only when the effective policy grants it.
+central_client_guard=(
+    'AuthorizationService' in dart_sync and
+    '.require(Capability.syncPull)' in dart_sync and
+    'authorization.can(Capability.syncPush)' in dart_sync and
+    sync_dart.count('.require(Capability.syncPush)')>=5 and
+    '.require(Capability.syncPull)' in sync_dart
+)
+if not central_client_guard: fail('AdminReadOnly client push guard','central syncPull/syncPush capability guards missing')
+else: ok('AdminReadOnly client push guard','central capabilities allow pull and block operational push')
 
 # Tenant read routes derive tenant from claims helper; TenantReadService filters BusinessId.
 read_paths=['/api/reports/dashboard','/api/products','/api/categories','/api/suppliers','/api/sales','/api/purchases','/api/inventory','/api/inventory/lots','/api/expenses','/api/cash','/api/users']
