@@ -12,6 +12,8 @@ final class InventoryRepository {
   final AppDatabase _db;
   final IdGenerator _ids;
   Future<int> stock(int productId, int branchId) async {
+    await AuthorizationService(_db)
+        .require(Capability.inventoryAvailabilityRead);
     final db = await _db.open();
     return stockInTx(db, productId, branchId);
   }

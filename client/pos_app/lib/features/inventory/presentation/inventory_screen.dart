@@ -1,1 +1,29 @@
-import 'package:flutter/material.dart';import 'package:pos_app/core/app_services.dart';import 'package:pos_app/features/inventory/data/inventory_repository.dart';import 'package:pos_app/shared/presentation/database_list_screen.dart';class InventoryScreen extends StatelessWidget{const InventoryScreen({super.key});@override Widget build(BuildContext context)=>DatabaseListScreen(title:'Inventario',query:'SELECT p.id,p.name,COALESCE(SUM(l.available_quantity),0) stock FROM products p LEFT JOIN inventory_lots l ON l.product_id=p.id AND l.active=1 GROUP BY p.id ORDER BY p.name',action:(c)async{final v=await textForm(c,'Ajuste de inventario',['Product ID','Cantidad (+/-)','Motivo']);if(v!=null)await InventoryRepository(appDatabase).adjust(productId:int.parse(v[0]),delta:int.parse(v[1]),reason:v[2]);});}
+import 'package:flutter/material.dart';
+import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/features/inventory/data/inventory_read_repository.dart';
+import 'package:pos_app/features/inventory/data/inventory_repository.dart';
+import 'package:pos_app/shared/presentation/database_list_screen.dart';
+
+class InventoryScreen extends StatelessWidget {
+  const InventoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => DatabaseListScreen(
+    title: 'Inventario',
+    loadRows: InventoryReadRepository(appDatabase).availability,
+    action: (dialogContext) async {
+      final values = await textForm(dialogContext, 'Ajuste de inventario', [
+        'Product ID',
+        'Cantidad (+/-)',
+        'Motivo',
+      ]);
+      if (values != null) {
+        await InventoryRepository(appDatabase).adjust(
+          productId: int.parse(values[0]),
+          delta: int.parse(values[1]),
+          reason: values[2],
+        );
+      }
+    },
+  );
+}

@@ -1,2 +1,81 @@
-import 'package:flutter/material.dart';import 'package:go_router/go_router.dart';import 'package:pos_app/core/app_services.dart';import 'package:pos_app/core/utils/money.dart';import 'package:pos_app/features/reports/data/report_repository.dart';
-class DashboardScreen extends StatelessWidget{const DashboardScreen({super.key});@override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Dashboard')),drawer:_drawer(context),body:FutureBuilder(future:ReportRepository(appDatabase).today(),builder:(c,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());final m=s.data!;return GridView.count(padding:const EdgeInsets.all(20),crossAxisCount:3,childAspectRatio:2.4,children:[_card('Ventas',formatMoney(m.salesCents)),_card('Operaciones','${m.operations}'),_card('Costo FIFO',formatMoney(m.fifoCostCents)),_card('Utilidad bruta',formatMoney(m.grossProfitCents)),_card('Gastos',formatMoney(m.expensesCents)),_card('Resultado',formatMoney(m.resultCents))]);}));Widget _card(String t,String v)=>Card(child:Center(child:ListTile(title:Text(t),subtitle:Text(v,style:const TextStyle(fontSize:24)))));Drawer _drawer(BuildContext c)=>Drawer(child:ListView(children:[const DrawerHeader(child:Text('POS Flutter')),ListTile(leading:const Icon(Icons.point_of_sale),title:const Text('Nueva venta'),onTap:()=>c.go('/pos')),for(final e in {'Productos':'/products','Categorías':'/categories','Proveedores':'/suppliers','Compras':'/purchases','Inventario':'/inventory','Ventas':'/sales','Caja':'/cash','Gastos':'/expenses','Reportes':'/reports','Usuarios':'/users','Respaldos':'/backup','Administración nube':'/cloud-admin'}.entries)ListTile(title:Text(e.key),onTap:()=>c.go(e.value))]));}
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/utils/money.dart';
+import 'package:pos_app/features/reports/data/report_repository.dart';
+
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Dashboard')),
+    drawer: _drawer(context),
+    body: FutureBuilder(
+      future: ReportRepository(appDatabase).today(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final metrics = snapshot.data!;
+        return GridView.count(
+          padding: const EdgeInsets.all(20),
+          crossAxisCount: 3,
+          childAspectRatio: 2.4,
+          children: [
+            _card('Ventas', formatMoney(metrics.salesCents)),
+            _card('Operaciones', '${metrics.operations}'),
+            if (metrics.fifoCostCents case final value?)
+              _card('Costo FIFO', formatMoney(value)),
+            if (metrics.grossProfitCents case final value?)
+              _card('Utilidad bruta', formatMoney(value)),
+            if (metrics.expensesCents case final value?)
+              _card('Gastos', formatMoney(value)),
+            if (metrics.resultCents case final value?)
+              _card('Resultado', formatMoney(value)),
+          ],
+        );
+      },
+    ),
+  );
+
+  Widget _card(String title, String value) => Card(
+    child: Center(
+      child: ListTile(
+        title: Text(title),
+        subtitle: Text(value, style: const TextStyle(fontSize: 24)),
+      ),
+    ),
+  );
+
+  Drawer _drawer(BuildContext context) => Drawer(
+    child: ListView(
+      children: [
+        const DrawerHeader(child: Text('POS Flutter')),
+        ListTile(
+          leading: const Icon(Icons.point_of_sale),
+          title: const Text('Nueva venta'),
+          onTap: () => context.go('/pos'),
+        ),
+        for (final entry in {
+          'Productos': '/products',
+          'Categorías': '/categories',
+          'Proveedores': '/suppliers',
+          'Compras': '/purchases',
+          'Inventario': '/inventory',
+          'Ventas': '/sales',
+          'Caja': '/cash',
+          'Gastos': '/expenses',
+          'Reportes': '/reports',
+          'Usuarios': '/users',
+          'Respaldos': '/backup',
+          'Administración nube': '/cloud-admin',
+        }.entries)
+          ListTile(
+            title: Text(entry.key),
+            onTap: () => context.go(entry.value),
+          ),
+      ],
+    ),
+  );
+}

@@ -5,11 +5,13 @@ class DatabaseListScreen extends StatefulWidget {
   const DatabaseListScreen({
     super.key,
     required this.title,
-    required this.query,
+    this.query,
+    this.loadRows,
     this.action,
-  });
+  }) : assert((query == null) != (loadRows == null));
   final String title;
-  final String query;
+  final String? query;
+  final Future<List<Map<String, Object?>>> Function()? loadRows;
   final Future<void> Function(BuildContext)? action;
   @override
   State<DatabaseListScreen> createState() => _DatabaseListScreenState();
@@ -17,8 +19,9 @@ class DatabaseListScreen extends StatefulWidget {
 
 class _DatabaseListScreenState extends State<DatabaseListScreen> {
   Future<List<Map<String, Object?>>> _load() async {
+    if (widget.loadRows case final loader?) return loader();
     final db = await appDatabase.open();
-    return db.rawQuery(widget.query);
+    return db.rawQuery(widget.query!);
   }
 
   @override
