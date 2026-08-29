@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/reports/data/report_repository.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -10,7 +10,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Dashboard')),
-    drawer: _drawer(context),
+    drawer: const AppNavigationDrawer(),
     body: FutureBuilder(
       future: ReportRepository(appDatabase).today(),
       builder: (context, snapshot) {
@@ -45,37 +45,6 @@ class DashboardScreen extends StatelessWidget {
         title: Text(title),
         subtitle: Text(value, style: const TextStyle(fontSize: 24)),
       ),
-    ),
-  );
-
-  Drawer _drawer(BuildContext context) => Drawer(
-    child: ListView(
-      children: [
-        const DrawerHeader(child: Text('POS Flutter')),
-        ListTile(
-          leading: const Icon(Icons.point_of_sale),
-          title: const Text('Nueva venta'),
-          onTap: () => context.go('/pos'),
-        ),
-        for (final entry in {
-          'Productos': '/products',
-          'Categorías': '/categories',
-          'Proveedores': '/suppliers',
-          'Compras': '/purchases',
-          'Inventario': '/inventory',
-          'Ventas': '/sales',
-          'Caja': '/cash',
-          'Gastos': '/expenses',
-          'Reportes': '/reports',
-          'Usuarios': '/users',
-          'Respaldos': '/backup',
-          'Administración nube': '/cloud-admin',
-        }.entries)
-          ListTile(
-            title: Text(entry.key),
-            onTap: () => context.go(entry.value),
-          ),
-      ],
     ),
   );
 }

@@ -7,6 +7,7 @@ import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_csv_service.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_models.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_repository.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class RemoteReportDetailScreen extends StatefulWidget {
   const RemoteReportDetailScreen({required this.kind, super.key});
@@ -37,6 +38,7 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
           title: Text(widget.kind.title),
           actions: [IconButton(tooltip: 'Exportar CSV', onPressed: _export, icon: const Icon(Icons.download))],
         ),
+        drawer: const AppNavigationDrawer(),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [

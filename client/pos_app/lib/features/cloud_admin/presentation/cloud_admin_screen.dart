@@ -1,24 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/authorization_providers.dart';
+import 'package:pos_app/core/authorization/authorization_service.dart';
+import 'package:pos_app/core/authorization/capability.dart';
 import 'package:pos_app/features/cloud_admin/data/cloud_admin_repository.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
-class CloudAdminScreen extends StatefulWidget {
+class CloudAdminScreen extends ConsumerStatefulWidget {
   const CloudAdminScreen({super.key});
 
   @override
-  State<CloudAdminScreen> createState() => _CloudAdminScreenState();
+  ConsumerState<CloudAdminScreen> createState() => _CloudAdminScreenState();
 }
 
-class _CloudAdminScreenState extends State<CloudAdminScreen> {
+class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
   late final CloudAdminRepository repo = CloudAdminRepository(cloudApiClient);
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => ref.watch(effectiveCapabilitiesProvider).when(
+      data: (effective) => _buildScaffold(context, effective),
+      loading: () => _buildScaffold(context, const EffectiveCapabilities.denied()),
+      error: (_, _) => _buildScaffold(context, const EffectiveCapabilities.denied()),
+    );
+
+  Widget _buildScaffold(
+    BuildContext context,
+    EffectiveCapabilities effective,
+  ) => Scaffold(
         appBar: AppBar(
           title: const Text('Administración remota'),
-          actions: [IconButton(tooltip: 'Invitar dispositivo administrativo', onPressed: _invite, icon: const Icon(Icons.devices))],
+          actions: [
+            if (effective.can(Capability.enrollment))
+              IconButton(tooltip: 'Invitar dispositivo administrativo', onPressed: _invite, icon: const Icon(Icons.devices)),
+          ],
         ),
+        drawer: AppNavigationDrawer(capabilities: effective),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -31,32 +49,23 @@ class _CloudAdminScreenState extends State<CloudAdminScreen> {
                 ),
               ),
             ),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.analytics_outlined),
-                title: const Text('Reportes remotos'),
-                subtitle: const Text('Ventas, utilidad, inventario, compras, gastos, caja y tendencias'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.go('/cloud-admin/reports'),
-              ),
-            ),
-            for (final entry in const {
-              'Ventas': '/api/sales',
-              'Productos': '/api/products',
-              'Categorías': '/api/categories',
-              'Proveedores': '/api/suppliers',
-              'Inventario': '/api/inventory',
-              'Lotes': '/api/inventory/lots',
-              'Compras': '/api/purchases',
-              'Gastos': '/api/expenses',
-              'Caja': '/api/cash',
-              'Usuarios': '/api/users',
-            }.entries)
+            if (effective.can(Capability.reportsFinancial))
               Card(
                 child: ListTile(
-                  title: Text(entry.key),
+                  leading: const Icon(Icons.analytics_outlined),
+                  title: const Text('Reportes remotos'),
+                  subtitle: const Text('Ventas, utilidad, inventario, compras, gastos, caja y tendencias'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _show(entry.key, entry.value),
+                  onTap: () => context.go('/cloud-admin/reports'),
+                ),
+              ),
+            for (final entry in _cloudReadEntries)
+              if (effective.can(entry.capability))
+              Card(
+                child: ListTile(
+                  title: Text(entry.label),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _show(entry.label, entry.path),
                 ),
               ),
           ],
@@ -101,3 +110,17 @@ class _CloudAdminScreenState extends State<CloudAdminScreen> {
     }
   }
 }
+
+const _cloudReadEntries = <({String label, String path, Capability capability})>[
+  (label: 'Ventas', path: '/api/sales', capability: Capability.saleHistory),
+  (label: 'Productos', path: '/api/products', capability: Capability.productRead),
+  (label: 'Categorías', path: '/api/categories', capability: Capability.categoryRead),
+  (label: 'Proveedores', path: '/api/suppliers', capability: Capability.supplierRead),
+  (label: 'Inventario', path: '/api/inventory', capability: Capability.inventoryAvailabilityRead),
+  (label: 'Lotes', path: '/api/inventory/lots', capability: Capability.inventoryLotsRead),
+  (label: 'Compras', path: '/api/purchases', capability: Capability.purchaseRead),
+  (label: 'Gastos', path: '/api/expenses', capability: Capability.expenseRead),
+  (label: 'Caja', path: '/api/cash', capability: Capability.cashRead),
+  (label: 'Usuarios', path: '/api/users', capability: Capability.usersRead),
+  (label: 'Dispositivos', path: '/api/devices', capability: Capability.devicesRead),
+];

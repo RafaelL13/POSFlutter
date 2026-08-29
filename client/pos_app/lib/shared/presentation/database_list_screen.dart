@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class DatabaseListScreen extends StatefulWidget {
   const DatabaseListScreen({
@@ -8,11 +9,13 @@ class DatabaseListScreen extends StatefulWidget {
     this.query,
     this.loadRows,
     this.action,
+    this.showNavigation = true,
   }) : assert((query == null) != (loadRows == null));
   final String title;
   final String? query;
   final Future<List<Map<String, Object?>>> Function()? loadRows;
   final Future<void> Function(BuildContext)? action;
+  final bool showNavigation;
   @override
   State<DatabaseListScreen> createState() => _DatabaseListScreenState();
 }
@@ -27,6 +30,7 @@ class _DatabaseListScreenState extends State<DatabaseListScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.title)),
+    drawer: widget.showNavigation ? const AppNavigationDrawer() : null,
     floatingActionButton: widget.action == null
         ? null
         : FloatingActionButton(

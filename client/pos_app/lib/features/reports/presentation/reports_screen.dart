@@ -3,6 +3,7 @@ import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/reports/data/csv_export_service.dart';
 import 'package:pos_app/features/reports/data/report_repository.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -10,6 +11,7 @@ class ReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Reportes')),
+    drawer: const AppNavigationDrawer(),
     body: FutureBuilder(
       future: ReportRepository(appDatabase).today(),
       builder: (context, snapshot) {

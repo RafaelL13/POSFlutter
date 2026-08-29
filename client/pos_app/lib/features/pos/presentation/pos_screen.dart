@@ -3,6 +3,7 @@ import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -107,6 +108,7 @@ class _PosScreenState extends State<PosScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Nueva venta')),
+      drawer: const AppNavigationDrawer(),
       floatingActionButton: FloatingActionButton(
         onPressed: addProduct,
         child: const Icon(Icons.add),

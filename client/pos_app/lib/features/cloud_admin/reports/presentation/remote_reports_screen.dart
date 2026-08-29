@@ -5,6 +5,7 @@ import 'package:pos_app/core/network/cloud_api_client.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_models.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_repository.dart';
+import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class RemoteReportsScreen extends StatefulWidget {
   const RemoteReportsScreen({super.key});
@@ -20,6 +21,7 @@ class _RemoteReportsScreenState extends State<RemoteReportsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Reportes remotos')),
+        drawer: const AppNavigationDrawer(),
         body: RefreshIndicator(
           onRefresh: () async => setState(() {}),
           child: ListView(
