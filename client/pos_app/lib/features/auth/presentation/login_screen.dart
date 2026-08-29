@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pos_app/app/route_access_service.dart';
+import 'package:pos_app/app/route_authorization.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/authorization/authorization_providers.dart';
 import 'package:pos_app/core/context/local_app_context.dart';
@@ -97,7 +99,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           return;
         }
         ref.invalidate(effectiveCapabilitiesProvider);
-        context.go('/cloud-admin');
+        final access = await RouteAccessService(appDatabase).load();
+        if (mounted) {
+          context.go(RouteAuthorization.authorizedHome(access.capabilities));
+        }
         return;
       }
       final session = await AuthRepository(appDatabase).login(_u.text, _p.text);
@@ -114,12 +119,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         appDatabase,
         cloudApiClient,
       ).tryLogin(_u.text, _p.text);
-      final ctx = await LocalAppContext.load(appDatabase);
       if (!mounted) {
         return;
       }
       ref.invalidate(effectiveCapabilitiesProvider);
-      context.go(ctx.isAdminReadOnly ? '/cloud-admin' : '/dashboard');
+      final access = await RouteAccessService(appDatabase).load();
+      if (mounted) {
+        context.go(RouteAuthorization.authorizedHome(access.capabilities));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);

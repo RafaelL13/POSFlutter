@@ -16,7 +16,7 @@ final class FirstRunService {
       final branchId=await tx.insert('branches',{'global_id':branchGid,'business_id':businessId,'name':'Principal','created_at':now,'updated_at':now});
       await tx.insert('devices',{'global_id':deviceGid,'branch_id':branchId,'name':deviceName.trim(),'mode':'PointOfSale','created_at':now,'updated_at':now});
       await tx.insert('users',{'global_id':userGid,'business_id':businessId,'name':adminName.trim(),'username':username.trim(),'password_hash':hash.hash,'password_salt':hash.salt,'role':'Administrator','created_at':now,'updated_at':now});
-      for(final entry in {'local_device_global_id':deviceGid,'active_user_global_id':userGid,'configured':'1'}.entries){await tx.insert('app_settings',{'key':entry.key,'value':entry.value,'updated_at':now},conflictAlgorithm:ConflictAlgorithm.replace);}
+      for(final entry in {'local_device_global_id':deviceGid,'active_user_global_id':userGid,'configured':'1','local_session_authenticated':'0'}.entries){await tx.insert('app_settings',{'key':entry.key,'value':entry.value,'updated_at':now},conflictAlgorithm:ConflictAlgorithm.replace);}
       final payload={'globalId':businessGid,'name':businessName.trim(),'active':true,'updatedAt':now,'serverVersion':0};
       await tx.insert('sync_queue',{'global_id':_ids.newId(),'entity_type':'Business','entity_global_id':businessGid,'operation':'Create','payload_version':1,'payload_json':jsonEncode(payload),'created_at':now});
     });

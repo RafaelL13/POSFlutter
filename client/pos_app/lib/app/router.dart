@@ -1,4 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pos_app/app/route_access_service.dart';
+import 'package:pos_app/app/route_authorization.dart';
+import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/features/auth/presentation/login_screen.dart';
 import 'package:pos_app/features/backup/presentation/backup_screen.dart';
 import 'package:pos_app/features/cash/presentation/cash_screen.dart';
@@ -19,44 +23,72 @@ import 'package:pos_app/features/sales/presentation/sales_screen.dart';
 import 'package:pos_app/features/suppliers/presentation/suppliers_screen.dart';
 import 'package:pos_app/features/users/presentation/users_screen.dart';
 
-final appRouter = GoRouter(
-  initialLocation: '/first-run',
-  routes: [
-    GoRoute(path: '/first-run', builder: (_, _) => const FirstRunScreen()),
-    GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-    GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
-    GoRoute(path: '/pos', builder: (_, _) => const PosScreen()),
-    GoRoute(path: '/products', builder: (_, _) => const ProductsScreen()),
-    GoRoute(path: '/categories', builder: (_, _) => const CategoriesScreen()),
-    GoRoute(path: '/suppliers', builder: (_, _) => const SuppliersScreen()),
-    GoRoute(path: '/purchases', builder: (_, _) => const PurchasesScreen()),
-    GoRoute(path: '/inventory', builder: (_, _) => const InventoryScreen()),
-    GoRoute(path: '/sales', builder: (_, _) => const SalesScreen()),
-    GoRoute(path: '/cash', builder: (_, _) => const CashScreen()),
-    GoRoute(path: '/expenses', builder: (_, _) => const ExpensesScreen()),
-    GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
-    GoRoute(path: '/users', builder: (_, _) => const UsersScreen()),
-    GoRoute(path: '/backup', builder: (_, _) => const BackupScreen()),
-    GoRoute(path: '/cloud-admin', builder: (_, _) => const CloudAdminScreen()),
-    GoRoute(
-      path: '/cloud-admin/reports',
-      builder: (_, _) => const RemoteReportsScreen(),
-    ),
-    GoRoute(
-      path: '/cloud-admin/reports/:kind',
-      builder: (_, state) {
-        final name = state.pathParameters['kind'];
-        RemoteReportKind? kind;
-        for (final candidate in RemoteReportKind.values) {
-          if (candidate.name == name) {
-            kind = candidate;
-            break;
-          }
-        }
-        return kind == null
-            ? const RemoteReportsScreen()
-            : RemoteReportDetailScreen(kind: kind);
-      },
-    ),
-  ],
+typedef RouteAccessLoader = Future<RouteAccessState> Function();
+
+final routeAccessLoaderProvider = Provider<RouteAccessLoader>(
+  (ref) => RouteAccessService(appDatabase).load,
+);
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final router = createAppRouter(
+    loadAccessState: ref.watch(routeAccessLoaderProvider),
+  );
+  ref.onDispose(router.dispose);
+  return router;
+});
+
+GoRouter createAppRouter({
+  required RouteAccessLoader loadAccessState,
+  List<RouteBase>? routes,
+  String initialLocation = firstRunPath,
+}) => GoRouter(
+  initialLocation: initialLocation,
+  redirect: (_, state) async =>
+      RouteAuthorization.redirect(state.uri.path, await loadAccessState()),
+  routes:
+      routes ??
+      [
+        GoRoute(path: '/first-run', builder: (_, _) => const FirstRunScreen()),
+        GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+        GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+        GoRoute(path: '/pos', builder: (_, _) => const PosScreen()),
+        GoRoute(path: '/products', builder: (_, _) => const ProductsScreen()),
+        GoRoute(
+          path: '/categories',
+          builder: (_, _) => const CategoriesScreen(),
+        ),
+        GoRoute(path: '/suppliers', builder: (_, _) => const SuppliersScreen()),
+        GoRoute(path: '/purchases', builder: (_, _) => const PurchasesScreen()),
+        GoRoute(path: '/inventory', builder: (_, _) => const InventoryScreen()),
+        GoRoute(path: '/sales', builder: (_, _) => const SalesScreen()),
+        GoRoute(path: '/cash', builder: (_, _) => const CashScreen()),
+        GoRoute(path: '/expenses', builder: (_, _) => const ExpensesScreen()),
+        GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
+        GoRoute(path: '/users', builder: (_, _) => const UsersScreen()),
+        GoRoute(path: '/backup', builder: (_, _) => const BackupScreen()),
+        GoRoute(
+          path: '/cloud-admin',
+          builder: (_, _) => const CloudAdminScreen(),
+        ),
+        GoRoute(
+          path: '/cloud-admin/reports',
+          builder: (_, _) => const RemoteReportsScreen(),
+        ),
+        GoRoute(
+          path: '/cloud-admin/reports/:kind',
+          builder: (_, state) {
+            final name = state.pathParameters['kind'];
+            RemoteReportKind? kind;
+            for (final candidate in RemoteReportKind.values) {
+              if (candidate.name == name) {
+                kind = candidate;
+                break;
+              }
+            }
+            return kind == null
+                ? const RemoteReportsScreen()
+                : RemoteReportDetailScreen(kind: kind);
+          },
+        ),
+      ],
 );
