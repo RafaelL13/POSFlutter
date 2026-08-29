@@ -1,4 +1,5 @@
 using System.Data;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,7 +18,20 @@ var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
 builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
-builder.Services.AddAuthorization(o=>o.AddPolicy("Administrator",p=>p.RequireRole("Administrator")));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Administrator", policy => policy.RequireRole("Administrator"));
+    foreach (var capability in Enum.GetValues<BackendReadCapability>())
+    {
+        options.AddPolicy(
+            BackendReadAuthorization.PolicyName(capability),
+            policy => policy.RequireAssertion(context =>
+                BackendReadAuthorization.PermissionFor(
+                    context.User.FindFirst(ClaimTypes.Role)?.Value,
+                    context.User.FindFirst("device_mode")?.Value,
+                    capability) != BackendReadPermission.None));
+    }
+});
 builder.Services.AddRateLimiter(o=>
 {
     o.AddPolicy("enrollment", httpContext =>
@@ -33,7 +47,24 @@ builder.Services.AddRateLimiter(o=>
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 builder.Services.AddHealthChecks().AddDbContextCheck<PosDbContext>(); builder.Services.AddOpenApi(); builder.Services.AddEndpointsApiExplorer(); builder.Services.AddSwaggerGen();
-var app=builder.Build(); app.UseHttpsRedirection(); app.UseRateLimiter(); app.UseAuthentication(); app.UseAuthorization(); if(app.Environment.IsDevelopment()){app.MapOpenApi();app.UseSwagger();app.UseSwaggerUI();}
+var app=builder.Build();
+app.UseHttpsRedirection();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.Use(async (context,next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (UnauthorizedAccessException)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { message = "Forbidden." });
+    }
+});
+if(app.Environment.IsDevelopment()){app.MapOpenApi();app.UseSwagger();app.UseSwaggerUI();}
 app.MapHealthChecks("/health");
 
 app.MapPost("/api/auth/login",async(LoginRequest r,ITokenService s,CancellationToken ct)=>(await s.LoginAsync(r,ct)) is { } a?Results.Ok(a):Results.Unauthorized());
@@ -71,21 +102,25 @@ app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService 
 app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();
 
 static SyncTenantContext T(HttpContext h)=>TenantClaims.Require(h.User);
-app.MapGet("/api/reports/dashboard",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.DashboardAsync(T(h),ct))).RequireAuthorization();
-app.MapGet("/api/products",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ProductsAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/categories",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CategoriesAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/suppliers",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SuppliersAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/sales",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SalesAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/sales/{globalId:guid}",async(Guid globalId,HttpContext h,TenantReadService r,CancellationToken ct)=>(await r.SaleAsync(T(h),globalId,ct)) is { } sale?Results.Ok(sale):Results.NotFound()).RequireAuthorization();
-app.MapGet("/api/purchases",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.PurchasesAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/inventory",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.InventoryAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/inventory/lots",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.LotsAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/expenses",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ExpensesAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/cash/sessions",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/cash",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization();
-app.MapGet("/api/users",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.UsersAsync(T(h),ct)})).RequireAuthorization();
+static string R(BackendReadCapability capability) => BackendReadAuthorization.PolicyName(capability);
+app.MapGet("/api/reports/dashboard",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.DashboardAsync(T(h),ct))).RequireAuthorization(R(BackendReadCapability.SalesRead));
+app.MapGet("/api/products",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ProductsAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.ProductsRead));
+app.MapGet("/api/categories",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CategoriesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.CategoriesRead));
+app.MapGet("/api/suppliers",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SuppliersAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.SuppliersRead));
+app.MapGet("/api/sales",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.SalesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.SalesRead));
+app.MapGet("/api/sales/{globalId:guid}",async(Guid globalId,HttpContext h,TenantReadService r,CancellationToken ct)=>(await r.SaleAsync(T(h),globalId,ct)) is { } sale?Results.Ok(sale):Results.NotFound()).RequireAuthorization(R(BackendReadCapability.SalesRead));
+app.MapGet("/api/purchases",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.PurchasesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.PurchasesRead));
+app.MapGet("/api/inventory",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.InventoryAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.InventoryAvailabilityRead));
+app.MapGet("/api/inventory/lots",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.LotsAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.InventoryLotsRead));
+app.MapGet("/api/expenses",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.ExpensesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.ExpensesRead));
+app.MapGet("/api/cash/sessions",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.CashRead));
+app.MapGet("/api/cash",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.CashAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.CashRead));
+app.MapGet("/api/users",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.UsersAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.UsersRead));
+app.MapGet("/api/devices",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.DevicesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.DevicesRead));
+app.MapGet("/api/business",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.BusinessAsync(T(h),ct))).RequireAuthorization(R(BackendReadCapability.BusinessRead));
+app.MapGet("/api/branches",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.BranchesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.BranchesRead));
 
-var reportApi=app.MapGroup("/api/admin/reports").RequireAuthorization("Administrator");
+var reportApi=app.MapGroup("/api/admin/reports").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead));
 reportApi.MapGet("/summary",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,RemoteReportService r,CancellationToken ct)=>
 {
  if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period. Use from inclusive and to exclusive, maximum 366 days."});

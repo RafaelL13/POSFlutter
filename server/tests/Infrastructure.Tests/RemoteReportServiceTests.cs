@@ -207,7 +207,7 @@ public sealed class RemoteReportServiceTests
     }
 
     [Fact]
-    public void Report_routes_are_wired_to_Administrator_policy()
+    public void Report_routes_are_wired_to_financial_read_policy()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory); string? program = null;
         while (directory is not null)
@@ -218,6 +218,28 @@ public sealed class RemoteReportServiceTests
         }
         Assert.NotNull(program);
         var source = File.ReadAllText(program!);
-        Assert.Contains("app.MapGroup(\"/api/admin/reports\").RequireAuthorization(\"Administrator\")",source);
+        Assert.Contains(
+            "app.MapGroup(\"/api/admin/reports\").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead))",
+            source);
+    }
+
+    [Theory]
+    [InlineData("Manager")]
+    [InlineData("Administrator")]
+    public async Task Financial_roles_can_read_advanced_reports(string role)
+    {
+        await using var test = await SqlServerTestDatabase.CreateAsync();
+        var now = DateTimeOffset.UtcNow;
+        var tenant = await test.SeedTenantAsync($"FIN-{role}",role:role);
+        var product = await AddProductAsync(test,tenant.Business,"FIN","Financial");
+        await AddSaleAsync(test,tenant,product,now,totalCents:1000,allocationCostCents:300);
+
+        var result = await new RemoteReportService(test.Db).SummaryAsync(
+            Context(tenant),
+            Period(now),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1000,result.NetSalesCents);
+        Assert.Equal(300,result.FifoCostCents);
     }
 }

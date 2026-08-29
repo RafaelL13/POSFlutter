@@ -27,7 +27,7 @@ def functional_files():
 def text(path:str)->str: return (ROOT/path).read_text(encoding='utf-8')
 
 # Required graph
-required=['client/pos_app/pubspec.yaml','client/pos_app/analysis_options.yaml','client/pos_app/lib/main.dart','client/pos_app/lib/app/app.dart','client/pos_app/lib/app/router.dart','client/pos_app/lib/database/app_database.dart','client/pos_app/lib/database/schema_v1.dart','client/pos_app/lib/database/schema_v2.dart','client/pos_app/lib/database/schema_v3.dart','client/pos_app/lib/sync/sync_repository.dart','client/pos_app/lib/sync/sync_service.dart','server/Pos.Server.sln','server/src/Api/Api.csproj','server/src/Application/Application.csproj','server/src/Domain/Domain.csproj','server/src/Infrastructure/Infrastructure.csproj','server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj','server/src/Api/Program.cs','server/src/Application/Contracts.cs','server/src/Application/Abstractions.cs','server/src/Domain/Entities.cs','server/src/Infrastructure/PosDbContext.cs','server/src/Infrastructure/SyncService.cs','server/src/Infrastructure/DeviceEnrollmentService.cs','server/src/Infrastructure/TenantReadService.cs','server/src/Infrastructure/RemoteReportService.cs','server/src/Infrastructure/JwtTokenService.cs','server/src/Application/ReportContracts.cs','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_models.dart','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_repository.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_reports_screen.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart']
+required=['client/pos_app/pubspec.yaml','client/pos_app/analysis_options.yaml','client/pos_app/lib/main.dart','client/pos_app/lib/app/app.dart','client/pos_app/lib/app/router.dart','client/pos_app/lib/database/app_database.dart','client/pos_app/lib/database/schema_v1.dart','client/pos_app/lib/database/schema_v2.dart','client/pos_app/lib/database/schema_v3.dart','client/pos_app/lib/sync/sync_repository.dart','client/pos_app/lib/sync/sync_service.dart','server/Pos.Server.sln','server/src/Api/Api.csproj','server/src/Application/Application.csproj','server/src/Domain/Domain.csproj','server/src/Infrastructure/Infrastructure.csproj','server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj','server/src/Api/Program.cs','server/src/Application/Contracts.cs','server/src/Application/Abstractions.cs','server/src/Application/ReadAuthorization.cs','server/src/Domain/Entities.cs','server/src/Infrastructure/PosDbContext.cs','server/src/Infrastructure/SyncService.cs','server/src/Infrastructure/DeviceEnrollmentService.cs','server/src/Infrastructure/TenantReadService.cs','server/src/Infrastructure/RemoteReportService.cs','server/src/Infrastructure/JwtTokenService.cs','server/src/Application/ReportContracts.cs','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_models.dart','client/pos_app/lib/features/cloud_admin/reports/data/remote_report_repository.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_reports_screen.dart','client/pos_app/lib/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart']
 missing=[x for x in required if not (ROOT/x).exists()]
 if missing: fail('required graph',', '.join(missing))
 else: ok('required graph',f'{len(required)} required paths present')
@@ -219,13 +219,15 @@ central_client_guard=(
 if not central_client_guard: fail('AdminReadOnly client push guard','central syncPull/syncPush capability guards missing')
 else: ok('AdminReadOnly client push guard','central capabilities allow pull and block operational push')
 
-# Tenant read routes derive tenant from claims helper; TenantReadService filters BusinessId.
-read_paths=['/api/reports/dashboard','/api/products','/api/categories','/api/suppliers','/api/sales','/api/purchases','/api/inventory','/api/inventory/lots','/api/expenses','/api/cash','/api/users']
+# Tenant read routes derive tenant from claims, require central read policies and filter BusinessId.
+read_paths=['/api/reports/dashboard','/api/products','/api/categories','/api/suppliers','/api/sales','/api/purchases','/api/inventory','/api/inventory/lots','/api/expenses','/api/cash','/api/users','/api/devices','/api/business','/api/branches']
 missing_routes=[x for x in read_paths if f'"{x}"' not in program]
 trs=text('server/src/Infrastructure/TenantReadService.cs')
+read_auth=text('server/src/Application/ReadAuthorization.cs')
 if missing_routes: fail('tenant read endpoints','missing '+', '.join(missing_routes))
-elif 'TenantClaims.Require(h.User)' not in program or trs.count('t.BusinessId')<10: fail('tenant read endpoints','claim-derived tenant helper or BusinessId filters insufficient')
-else: ok('tenant read endpoints',f'{len(read_paths)} authenticated tenant-scoped read routes')
+elif 'TenantClaims.Require(h.User)' not in program or trs.count('tenant.BusinessId')<10: fail('tenant read endpoints','claim-derived tenant helper or BusinessId filters insufficient')
+elif 'AuthorizationPolicyVersion = 1' not in read_auth or 'BackendReadAuthorization.Require' not in trs or program.count('BackendReadCapability.')<14: fail('tenant read endpoints','central versioned backend read policies missing')
+else: ok('tenant read endpoints',f'{len(read_paths)} capability-authorized tenant-scoped read routes')
 # No direct operational mutation endpoints outside sync/bootstrap/enrollment.
 operational_write=re.findall(r'app\.Map(?:Post|Put|Delete)\("([^\"]+)"',program)
 unexpected=[p for p in operational_write if p not in ['/api/auth/login','/api/auth/refresh','/api/bootstrap','/api/device-enrollment/invitations','/api/device-enrollment/redeem','/api/sync/push']]
@@ -240,7 +242,7 @@ if missing_enroll: fail('FASE16 enrollment',', '.join(missing_enroll))
 else: ok('FASE16 enrollment','token/hash/expiry/revocation/admin/serializable/idempotency/rate-limit/device-mode checks present')
 
 
-# FASE17 remote reports: explicit admin-only read surface, tenant filters, historical FIFO and client read-only queries.
+# FASE17/18A.5 remote reports: financial-read policy, tenant filters, historical FIFO and client read-only queries.
 report_service=text('server/src/Infrastructure/RemoteReportService.cs')
 report_contracts=text('server/src/Application/ReportContracts.cs')
 remote_repo=text('client/pos_app/lib/features/cloud_admin/reports/data/remote_report_repository.dart')
@@ -248,12 +250,12 @@ remote_screen=text('client/pos_app/lib/features/cloud_admin/reports/presentation
 remote_detail=text('client/pos_app/lib/features/cloud_admin/reports/presentation/remote_report_detail_screen.dart')
 report_routes=['/summary','/sales','/sales/details','/products','/products/low-performance','/categories','/users','/purchases','/suppliers','/inventory','/expenses','/cash','/payment-methods','/cancellations','/trends/products']
 missing_report_routes=[x for x in report_routes if f'reportApi.MapGet("{x}"' not in program]
-if 'app.MapGroup("/api/admin/reports").RequireAuthorization("Administrator")' not in program:
-    fail('FASE17 report authorization','remote report group must require Administrator policy')
+if 'app.MapGroup("/api/admin/reports").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead))' not in program or 'BackendReadCapability.FinancialReportsRead' not in report_service:
+    fail('FASE17 report authorization','remote report group/service must require central FinancialReportsRead policy')
 elif missing_report_routes:
     fail('FASE17 report routes','missing '+', '.join(missing_report_routes))
 else:
-    ok('FASE17 report routes',f'{len(report_routes)} Administrator-only read endpoints')
+    ok('FASE17 report routes',f'{len(report_routes)} Manager/Administrator financial-read endpoints')
 report_tenant_ok=(report_service.count('tenant.BusinessId')>=18 and 'Tenant context is not active.' in report_service and 'business.Id == tenant.BusinessId' in report_service)
 if not report_tenant_ok: fail('FASE17 tenant isolation','report service lacks pervasive claim-derived BusinessId scoping')
 else: ok('FASE17 tenant isolation','report queries scoped by authenticated tenant context')

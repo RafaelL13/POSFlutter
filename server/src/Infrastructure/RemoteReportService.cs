@@ -12,6 +12,9 @@ public sealed class RemoteReportService(PosDbContext db)
 
     private async Task EnsureAsync(SyncTenantContext tenant,CancellationToken ct)
     {
+        BackendReadAuthorization.Require(
+            tenant,
+            BackendReadCapability.FinancialReportsRead);
         var valid = await (
             from business in _db.Businesses.AsNoTracking()
             join branch in _db.Branches.AsNoTracking() on business.Id equals branch.BusinessId
@@ -20,7 +23,9 @@ public sealed class RemoteReportService(PosDbContext db)
             where business.Id == tenant.BusinessId && business.GlobalId == tenant.BusinessGlobalId && business.Active
                 && branch.Id == tenant.BranchId && branch.GlobalId == tenant.BranchGlobalId && branch.Active
                 && device.Id == tenant.DeviceId && device.GlobalId == tenant.DeviceGlobalId && device.Active
+                && device.Mode == tenant.DeviceMode
                 && user.Id == tenant.UserId && user.GlobalId == tenant.UserGlobalId && user.Active
+                && user.Role == tenant.Role
             select business.Id).AnyAsync(ct);
         if (!valid) throw new UnauthorizedAccessException("Tenant context is not active.");
     }
