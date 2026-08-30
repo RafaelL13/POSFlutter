@@ -38,7 +38,7 @@ def fifo_allocate(db, product_id, branch_id, quantity):
     return allocations,cost
 
 def main():
-    v1=read_statements(DB/'schema_v1.dart'); v2=read_statements(DB/'schema_v2.dart'); v3=read_statements(DB/'schema_v3.dart'); v4=read_statements(DB/'schema_v4.dart')
+    v1=read_statements(DB/'schema_v1.dart'); v2=read_statements(DB/'schema_v2.dart'); v3=read_statements(DB/'schema_v3.dart'); v4=read_statements(DB/'schema_v4.dart'); v5=read_statements(DB/'schema_v5.dart')
     with tempfile.TemporaryDirectory() as td:
         path=Path(td)/'migration.db'
         db=sqlite3.connect(path); db.execute('PRAGMA foreign_keys=ON'); exec_all(db,v1)
@@ -58,7 +58,7 @@ def main():
         db.execute("INSERT INTO sale_detail_lots(global_id,sale_detail_id,inventory_lot_id,quantity,unit_cost_cents,total_cost_cents) VALUES('sdl-gid',?,?,1,1200,1200)",(sd,lot))
         db.commit()
         before={'business':db.execute('SELECT global_id,name FROM businesses').fetchone(),'device':db.execute('SELECT global_id FROM devices').fetchone(),'product':db.execute('SELECT global_id,sale_price_cents,minimum_stock FROM products').fetchone(),'sale':db.execute('SELECT global_id,total_cents,fifo_cost_cents FROM sales').fetchone(),'lot':db.execute('SELECT global_id,initial_quantity,available_quantity,unit_cost_cents FROM inventory_lots').fetchone()}
-        exec_all(db,v2); db.execute("UPDATE app_settings SET value='123' WHERE key='sync_pull_cursor'"); exec_all(db,v3); exec_all(db,v4); db.commit(); db.close()
+        exec_all(db,v2); db.execute("UPDATE app_settings SET value='123' WHERE key='sync_pull_cursor'"); exec_all(db,v3); exec_all(db,v4); exec_all(db,v5); db.commit(); db.close()
         db=sqlite3.connect(path); db.execute('PRAGMA foreign_keys=ON')
         assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -75,6 +75,11 @@ def main():
         try:
             db.execute("INSERT INTO special_authorization_grants(global_id,capability,requirement,performed_by_user_global_id,authorized_by_user_global_id,business_global_id,device_global_id,reason,authorized_at) VALUES('grant-empty','saleCancel','SecondUserAuthorization','user-gid','manager-gid','business-gid','device-gid','   ',?)",(now,)); db.commit(); raise AssertionError('empty authorization reason accepted')
         except sqlite3.IntegrityError: db.rollback()
+        columns={r[1] for r in db.execute('PRAGMA table_info(sync_queue)')}
+        assert {'error_category','error_code','requires_action'} <= columns
+        db.execute("INSERT INTO sync_queue(global_id,entity_type,entity_global_id,operation,payload_json,created_at,status,error_category,error_code,requires_action) VALUES('terminal-op','Sale','sale-terminal','Create','{}',?,'Error','AUTHORIZATION_REJECTED','RoleDenied',1)",(now,)); db.commit()
+        assert db.execute("SELECT COUNT(*) FROM sync_queue WHERE status='Pending' OR (status='Error' AND next_attempt_at IS NOT NULL AND next_attempt_at<=?)",(now,)).fetchone()[0]==0
+        assert db.execute("SELECT error_category,error_code,requires_action,next_attempt_at FROM sync_queue WHERE global_id='terminal-op'").fetchone()==('AUTHORIZATION_REJECTED','RoleDenied',1,None)
         # SQLite-level integer enforcement.
         try:
             db.execute("UPDATE products SET sale_price_cents=1.5 WHERE id=?",(pid,)); db.commit(); raise AssertionError('fractional money accepted')
@@ -115,9 +120,9 @@ def main():
     try: fifo_allocate(db,1,1,8); raise AssertionError('insufficient FIFO stock accepted')
     except ValueError: pass
     print('SQLITE_VALIDATION=PASS')
-    print(f'V1_STATEMENTS={len(v1)} V2_STATEMENTS={len(v2)} V3_STATEMENTS={len(v3)} V4_STATEMENTS={len(v4)}')
+    print(f'V1_STATEMENTS={len(v1)} V2_STATEMENTS={len(v2)} V3_STATEMENTS={len(v3)} V4_STATEMENTS={len(v4)} V5_STATEMENTS={len(v5)}')
     print('INTEGRITY=ok FOREIGN_KEYS=ok DATA_PRESERVED=yes DEVICE_MODE=PointOfSale CURSOR=123')
-    print('ROLLBACK=verified CONFLICT=verified INTEGER_CONSTRAINTS=verified ENROLLMENT_DEVICE_ID=verified GRANT_REPLAY=blocked')
+    print('ROLLBACK=verified CONFLICT=verified INTEGER_CONSTRAINTS=verified ENROLLMENT_DEVICE_ID=verified GRANT_REPLAY=blocked TERMINAL_SYNC_RETRY=blocked')
     print('FIFO_CASE1=cost300_remaining7 FIFO_CASE2=cost440_remainingB3 FIFO_CASE3=rejected')
 
 if __name__=='__main__': main()

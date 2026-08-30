@@ -61,7 +61,11 @@ app.Use(async (context,next) =>
     catch (UnauthorizedAccessException)
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new { message = "Forbidden." });
+        await context.Response.WriteAsJsonAsync(new
+        {
+            errorCode = SyncErrorCodes.AuthorizationDenied,
+            message = "The authenticated context is not authorized."
+        });
     }
 });
 if(app.Environment.IsDevelopment()){app.MapOpenApi();app.UseSwagger();app.UseSwaggerUI();}

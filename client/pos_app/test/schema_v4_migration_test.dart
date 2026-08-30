@@ -98,7 +98,7 @@ void main() {
     addTearDown(database.close);
     final upgraded = await database.open();
 
-    expect(await upgraded.getVersion(), 4);
+    expect(await upgraded.getVersion(), AppDatabase.schemaVersion);
     expect(
       await upgraded.query(
         'businesses',

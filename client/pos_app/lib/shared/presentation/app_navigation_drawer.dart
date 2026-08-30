@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pos_app/app/navigation_model.dart';
 import 'package:pos_app/core/authorization/authorization_providers.dart';
 import 'package:pos_app/core/authorization/authorization_service.dart';
+import 'package:pos_app/sync/presentation/sync_status_panel.dart';
 
 class AppNavigationDrawer extends ConsumerWidget {
   const AppNavigationDrawer({this.capabilities, this.currentRoute, super.key});
@@ -18,6 +19,7 @@ class AppNavigationDrawer extends ConsumerWidget {
       return _NavigationDrawer(
         capabilities: supplied,
         currentRoute: currentRoute,
+        showSyncStatus: false,
       );
     }
     return ref
@@ -26,22 +28,30 @@ class AppNavigationDrawer extends ConsumerWidget {
           data: (effective) => _NavigationDrawer(
             capabilities: effective,
             currentRoute: currentRoute,
+            showSyncStatus: true,
           ),
           loading: () => const _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
+            showSyncStatus: false,
           ),
           error: (_, _) => const _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
+            showSyncStatus: false,
           ),
         );
   }
 }
 
 class _NavigationDrawer extends StatelessWidget {
-  const _NavigationDrawer({required this.capabilities, this.currentRoute});
+  const _NavigationDrawer({
+    required this.capabilities,
+    required this.showSyncStatus,
+    this.currentRoute,
+  });
 
   final EffectiveCapabilities capabilities;
   final String? currentRoute;
+  final bool showSyncStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +86,7 @@ class _NavigationDrawer extends StatelessWidget {
                 },
               ),
           ],
+          if (showSyncStatus) ...[const Divider(), const SyncStatusPanel()],
         ],
       ),
     );

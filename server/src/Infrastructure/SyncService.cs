@@ -27,7 +27,8 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     .Select(operation => new SyncOperationResult(
                         operation.GlobalId,
                         "Rejected",
-                        "This device is read-only and cannot push operational changes."))
+                        "This device is read-only and cannot push operational changes.",
+                        ErrorCode: SyncErrorCodes.DeviceReadOnly))
                     .ToList(),
                 DateTimeOffset.UtcNow);
         }
@@ -41,7 +42,11 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             }
             catch (UnauthorizedAccessException ex)
             {
-                results.Add(new SyncOperationResult(operation.GlobalId, "Rejected", SafeSyncError(ex)));
+                results.Add(new SyncOperationResult(
+                    operation.GlobalId,
+                    "Rejected",
+                    SafeSyncError(ex),
+                    ErrorCode: SyncErrorCodes.RoleDenied));
                 continue;
             }
 
@@ -86,13 +91,28 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     "Conflict",
                     "The catalog record changed on the server. Local data was not applied.",
                     ex.RemoteVersion,
-                    document.RootElement.Clone()));
+                    document.RootElement.Clone(),
+                    SyncErrorCodes.Conflict));
+            }
+            catch (UnsupportedSyncOperationException ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _db.ChangeTracker.Clear();
+                results.Add(new SyncOperationResult(
+                    operation.GlobalId,
+                    "Rejected",
+                    SafeSyncError(ex),
+                    ErrorCode: SyncErrorCodes.UnsupportedOperation));
             }
             catch (InvalidOperationException ex)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
-                results.Add(new SyncOperationResult(operation.GlobalId, "Retry", SafeSyncError(ex)));
+                results.Add(new SyncOperationResult(
+                    operation.GlobalId,
+                    "Retry",
+                    SafeSyncError(ex),
+                    ErrorCode: SyncErrorCodes.ServerError));
             }
             catch (DbUpdateException ex)
             {
@@ -103,13 +123,21 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     cancellationToken);
                 results.Add(wonByAnotherRequest
                     ? new SyncOperationResult(operation.GlobalId, "AlreadyProcessed")
-                    : new SyncOperationResult(operation.GlobalId, "Rejected", SafeSyncError(ex)));
+                    : new SyncOperationResult(
+                        operation.GlobalId,
+                        "Rejected",
+                        SafeSyncError(ex),
+                        ErrorCode: SyncErrorCodes.ValidationFailed));
             }
             catch (Exception ex) when (ex is JsonException or ArgumentException or OverflowException)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
-                results.Add(new SyncOperationResult(operation.GlobalId, "Rejected", SafeSyncError(ex)));
+                results.Add(new SyncOperationResult(
+                    operation.GlobalId,
+                    "Rejected",
+                    SafeSyncError(ex),
+                    ErrorCode: SyncErrorCodes.ValidationFailed));
             }
         }
 
@@ -158,7 +186,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         CancellationToken cancellationToken)
     {
         if (operation.PayloadVersion != 1)
-            throw new ArgumentException($"Unsupported payload version {operation.PayloadVersion} for {operation.EntityType}.");
+            throw new UnsupportedSyncOperationException($"Unsupported payload version {operation.PayloadVersion} for {operation.EntityType}.");
         if (operation.GlobalId == Guid.Empty || operation.EntityGlobalId == Guid.Empty)
             throw new ArgumentException("Sync operation IDs are required.");
         switch (operation.EntityType, operation.Operation)
@@ -211,7 +239,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                 await ApplySaleCancellationAsync(operation, tenant, cancellationToken);
                 break;
             default:
-                throw new ArgumentException($"Unsupported sync operation: {operation.EntityType}/{operation.Operation}.");
+                throw new UnsupportedSyncOperationException($"Unsupported sync operation: {operation.EntityType}/{operation.Operation}.");
         }
     }
 
@@ -1191,4 +1219,6 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         public long RemoteVersion { get; } = remoteVersion;
         public string RemotePayloadJson { get; } = remotePayloadJson;
     }
+
+    private sealed class UnsupportedSyncOperationException(string message) : Exception(message);
 }

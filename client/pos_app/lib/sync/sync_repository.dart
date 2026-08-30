@@ -8,6 +8,8 @@ import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/sync/sync_operation.dart';
 import 'package:pos_app/sync/sync_pull.dart';
+import 'package:pos_app/sync/sync_error.dart';
+import 'package:pos_app/sync/sync_health.dart';
 
 final class SyncRepository {
   SyncRepository({required this._database, IdGenerator? idGenerator})
@@ -39,7 +41,14 @@ final class SyncRepository {
     for (final operation in operations) {
       batch.update(
         'sync_queue',
-        {'status': 'Syncing', 'last_attempt_at': now, 'error_message': null},
+        {
+          'status': 'Syncing',
+          'last_attempt_at': now,
+          'error_message': null,
+          'error_category': null,
+          'error_code': null,
+          'requires_action': 0,
+        },
         where: 'id = ? AND status IN (?, ?)',
         whereArgs: [operation.id, 'Pending', 'Error'],
       );
@@ -60,6 +69,9 @@ final class SyncRepository {
               'status': 'Synced',
               'error_message': null,
               'next_attempt_at': null,
+              'error_category': null,
+              'error_code': null,
+              'requires_action': 0,
             },
             where: 'global_id = ?',
             whereArgs: [result.globalId],
@@ -68,13 +80,15 @@ final class SyncRepository {
         }
 
         if (result.status == 'Retry') {
-          final nextRetry = DateTime.now()
-              .toUtc()
-              .add(const Duration(seconds: 30))
-              .toIso8601String();
-          await tx.rawUpdate(
-            "UPDATE sync_queue SET status = 'Error', retry_count = retry_count + 1, error_message = ?, next_attempt_at = ? WHERE global_id = ?",
-            [_safeMessage(result.error), nextRetry, result.globalId],
+          await _markFailure(
+            tx,
+            whereColumn: 'global_id',
+            whereValue: result.globalId,
+            failure: SyncFailure.fromOperationResult(result),
+            nextAttemptAt: DateTime.now()
+                .toUtc()
+                .add(const Duration(seconds: 30))
+                .toIso8601String(),
           );
           continue;
         }
@@ -83,46 +97,45 @@ final class SyncRepository {
             result.remoteVersion != null &&
             result.remotePayload != null) {
           await _recordPushConflict(tx, result);
-          await tx.rawUpdate(
-            "UPDATE sync_queue SET status = 'Error', retry_count = retry_count + 1, error_message = ?, next_attempt_at = NULL WHERE global_id = ?",
-            [
-              _safeMessage(result.error) ??
-                  'Conflicto pendiente de resolución.',
-              result.globalId,
-            ],
+          await _markFailure(
+            tx,
+            whereColumn: 'global_id',
+            whereValue: result.globalId,
+            failure: SyncFailure.fromOperationResult(result),
           );
           continue;
         }
 
-        await tx.rawUpdate(
-          "UPDATE sync_queue SET status = 'Error', retry_count = retry_count + 1, error_message = ?, next_attempt_at = NULL WHERE global_id = ?",
-          [_safeMessage(result.error), result.globalId],
+        await _markFailure(
+          tx,
+          whereColumn: 'global_id',
+          whereValue: result.globalId,
+          failure: SyncFailure.fromOperationResult(result),
         );
       }
     });
   }
 
-  Future<void> markTransportFailure(
+  Future<void> markBatchFailure(
     List<SyncOperationRecord> operations,
-    String message,
+    SyncFailure failure,
   ) async {
     if (operations.isEmpty) return;
     await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.transaction((tx) async {
       for (final operation in operations) {
-        final nextRetry = DateTime.now()
-            .toUtc()
-            .add(_backoff(operation.retryCount + 1))
-            .toIso8601String();
-        await tx.rawUpdate(
-          '''
-          UPDATE sync_queue
-          SET status = 'Error', retry_count = retry_count + 1,
-              error_message = ?, next_attempt_at = ?
-          WHERE id = ?
-          ''',
-          [_safeMessage(message), nextRetry, operation.id],
+        await _markFailure(
+          tx,
+          whereColumn: 'id',
+          whereValue: operation.id,
+          failure: failure,
+          nextAttemptAt: failure.retryable
+              ? DateTime.now()
+                    .toUtc()
+                    .add(_backoff(operation.retryCount + 1))
+                    .toIso8601String()
+              : null,
         );
       }
     });
@@ -132,8 +145,83 @@ final class SyncRepository {
     await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.rawUpdate(
-      "UPDATE sync_queue SET status = 'Pending', error_message = 'Reintento después de cierre inesperado.' WHERE status = 'Syncing'",
+      "UPDATE sync_queue SET status = 'Pending', error_message = 'Reintento después de cierre inesperado.', error_category = NULL, error_code = NULL, requires_action = 0 WHERE status = 'Syncing'",
     );
+  }
+
+  Future<int> releaseAuthenticationRequired() async {
+    final db = await _database.open();
+    return db.rawUpdate(
+      "UPDATE sync_queue SET status='Pending', error_message=NULL, error_category=NULL, error_code=NULL, requires_action=0, next_attempt_at=NULL WHERE status='Error' AND error_category=?",
+      [SyncErrorCategory.authenticationRequired.storageValue],
+    );
+  }
+
+  Future<void> recordPullFailure(SyncFailure failure) async {
+    final db = await _database.open();
+    await db.insert('app_settings', {
+      'key': 'sync_pull_failure',
+      'value': jsonEncode({
+        'category': failure.category.storageValue,
+        'code': failure.code,
+        'message': failure.message,
+        'disposition': failure.disposition.name,
+      }),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> clearPullFailure() async {
+    final db = await _database.open();
+    await db.delete(
+      'app_settings',
+      where: 'key=?',
+      whereArgs: ['sync_pull_failure'],
+    );
+  }
+
+  Future<SyncSummary> summary({required bool isOnline}) async {
+    final db = await _database.open();
+    final counts = await db.rawQuery('''
+      SELECT
+        SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END) pending_count,
+        SUM(CASE WHEN status='Error' AND next_attempt_at IS NOT NULL THEN 1 ELSE 0 END) retrying_count,
+        SUM(CASE WHEN requires_action=1 THEN 1 ELSE 0 END) attention_count,
+        SUM(CASE WHEN error_category='CONFLICT' THEN 1 ELSE 0 END) conflict_count,
+        SUM(CASE WHEN status='Syncing' THEN 1 ELSE 0 END) syncing_count
+      FROM sync_queue
+    ''');
+    final row = counts.single;
+    final pullRows = await db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key=?',
+      whereArgs: ['sync_pull_failure'],
+      limit: 1,
+    );
+    return SyncSummary(
+      pendingCount: (row['pending_count'] as int?) ?? 0,
+      retryingCount: (row['retrying_count'] as int?) ?? 0,
+      attentionCount: (row['attention_count'] as int?) ?? 0,
+      conflictCount: (row['conflict_count'] as int?) ?? 0,
+      isOnline: isOnline,
+      isSyncing: ((row['syncing_count'] as int?) ?? 0) > 0,
+      pullFailure: pullRows.isEmpty
+          ? null
+          : _pullFailureFromJson(pullRows.single['value'] as String),
+    );
+  }
+
+  Future<List<SyncAttentionItem>> attentionItems() async {
+    final db = await _database.open();
+    final rows = await db.query(
+      'sync_queue',
+      columns: ['entity_type', 'created_at', 'error_category'],
+      where: 'requires_action=1',
+      orderBy: 'created_at DESC',
+      limit: 100,
+    );
+    return rows.map(SyncAttentionItem.fromRow).toList(growable: false);
   }
 
   Future<int> pendingCount() async {
@@ -630,6 +718,19 @@ final class SyncRepository {
       'detected_at': now,
       'status': 'Pending',
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await tx.update(
+      'sync_queue',
+      {
+        'status': 'Error',
+        'error_message': 'Existe un conflicto pendiente de resolución.',
+        'error_category': SyncErrorCategory.conflict.storageValue,
+        'error_code': 'PullConflict',
+        'requires_action': 1,
+        'next_attempt_at': null,
+      },
+      where: 'global_id=?',
+      whereArgs: [pending['global_id']],
+    );
   }
 
   Future<void> _recordPushConflict(
@@ -764,9 +865,55 @@ final class SyncRepository {
     return Duration(seconds: seconds);
   }
 
-  static String? _safeMessage(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final text = value.trim();
-    return text.length <= 500 ? text : text.substring(0, 500);
+  static Future<void> _markFailure(
+    DatabaseExecutor tx, {
+    required String whereColumn,
+    required Object whereValue,
+    required SyncFailure failure,
+    String? nextAttemptAt,
+  }) => tx.rawUpdate(
+    '''
+    UPDATE sync_queue
+    SET status='Error', retry_count=retry_count+1,
+        error_message=?, error_category=?, error_code=?,
+        requires_action=?, next_attempt_at=?
+    WHERE $whereColumn=?
+    ''',
+    [
+      failure.message,
+      failure.category.storageValue,
+      failure.code,
+      failure.requiresAction ? 1 : 0,
+      failure.retryable ? nextAttemptAt : null,
+      whereValue,
+    ],
+  );
+
+  static SyncFailure _pullFailureFromJson(String value) {
+    try {
+      final json = Map<String, Object?>.from(jsonDecode(value) as Map);
+      final category = SyncErrorCategory.tryParse(json['category'] as String?);
+      final disposition = SyncFailureDisposition.values
+          .where((item) => item.name == json['disposition'])
+          .firstOrNull;
+      if (category == null || disposition == null) {
+        throw const FormatException();
+      }
+      return SyncFailure(
+        category: category,
+        code: json['code']?.toString() ?? 'ProtocolError',
+        disposition: disposition,
+        message:
+            json['message']?.toString() ??
+            'La sincronización remota requiere revisión.',
+      );
+    } on Object {
+      return const SyncFailure(
+        category: SyncErrorCategory.unsupportedOperation,
+        code: 'InvalidStoredFailure',
+        disposition: SyncFailureDisposition.terminal,
+        message: 'El estado de sincronización requiere revisión.',
+      );
+    }
   }
 }

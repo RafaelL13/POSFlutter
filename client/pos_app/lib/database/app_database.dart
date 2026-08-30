@@ -7,6 +7,7 @@ import 'schema_v1.dart';
 import 'schema_v2.dart';
 import 'schema_v3.dart';
 import 'schema_v4.dart';
+import 'schema_v5.dart';
 
 final class AppDatabase {
   AppDatabase({
@@ -14,7 +15,7 @@ final class AppDatabase {
     DatabaseFactory? factory,
     this.databasePath,
   }) : _factory = factory ?? databaseFactory;
-  static const schemaVersion = 4;
+  static const schemaVersion = 5;
   final String fileName;
   final DatabaseFactory _factory;
   final String? databasePath;
@@ -40,6 +41,7 @@ final class AppDatabase {
           await _executeAll(db, schemaV2Statements);
           await _executeAll(db, schemaV3Statements);
           await _executeAll(db, schemaV4Statements);
+          await _executeAll(db, schemaV5Statements);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2 && newVersion >= 2) {
@@ -50,6 +52,9 @@ final class AppDatabase {
           }
           if (oldVersion < 4 && newVersion >= 4) {
             await _executeAll(db, schemaV4Statements);
+          }
+          if (oldVersion < 5 && newVersion >= 5) {
+            await _executeAll(db, schemaV5Statements);
           }
         },
       ),

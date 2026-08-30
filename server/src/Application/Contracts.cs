@@ -5,10 +5,21 @@ namespace Pos.Application;
 public sealed record SyncTenantContext(long BusinessId, Guid BusinessGlobalId, long BranchId, Guid BranchGlobalId, long DeviceId, Guid DeviceGlobalId, long UserId, Guid UserGlobalId, string Role, string DeviceMode);
 public sealed record SyncOperationDto(Guid GlobalId,string EntityType,Guid EntityGlobalId,string Operation,int PayloadVersion,JsonElement Payload);
 public sealed record SyncPushRequest(IReadOnlyList<SyncOperationDto> Operations);
-public sealed record SyncOperationResult(Guid GlobalId,string Status,string? Error=null,long? RemoteVersion=null,JsonElement? RemotePayload=null);
+public sealed record SyncOperationResult(Guid GlobalId,string Status,string? Error=null,long? RemoteVersion=null,JsonElement? RemotePayload=null,string? ErrorCode=null);
 public sealed record SyncPushResponse(IReadOnlyList<SyncOperationResult> Results,DateTimeOffset ServerTime);
 public sealed record SyncPullChange(long Cursor,string EntityType,Guid EntityGlobalId,string Operation,long Version,DateTimeOffset ChangedAt,JsonElement Payload);
 public sealed record SyncPullResponse(long NextCursor,bool HasMore,IReadOnlyList<SyncPullChange> Changes,DateTimeOffset ServerTime);
+
+public static class SyncErrorCodes
+{
+    public const string AuthorizationDenied = "AuthorizationDenied";
+    public const string DeviceReadOnly = "DeviceReadOnly";
+    public const string RoleDenied = "RoleDenied";
+    public const string ValidationFailed = "ValidationFailed";
+    public const string Conflict = "Conflict";
+    public const string UnsupportedOperation = "UnsupportedOperation";
+    public const string ServerError = "ServerError";
+}
 
 public sealed record LoginRequest(Guid BusinessGlobalId,Guid DeviceGlobalId,string Username,string Password);
 public sealed record RefreshRequest(string RefreshToken);
