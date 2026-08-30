@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 
@@ -56,11 +57,40 @@ final class CashRepository {
     return gid;
   }
 
-  Future<void> close(int countedCents) async {
+  Future<void> close(
+    int countedCents, {
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async {
     if (countedCents < 0) throw ArgumentError('Contado inválido.');
     final authorization = await AuthorizationService(_db)
         .require(Capability.cashClose);
     final ctx = authorization.context!;
+    final db = await _db.open();
+    final currentRows = await db.query(
+      'cash_sessions',
+      where: "device_id=? AND status='Open'",
+      whereArgs: [ctx.deviceId],
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    if (currentRows.isEmpty) throw StateError('No hay caja abierta.');
+    final current = currentRows.first;
+    final currentMovements = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount_cents),0) s FROM cash_movements WHERE cash_session_id=?',
+      [current['id']],
+    );
+    final currentExpected =
+        (current['opening_balance_cents'] as int) +
+        (currentMovements.first['s'] as int);
+    final hasDifference = countedCents != currentExpected;
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = hasDifference
+        ? await specialAuthorization.prepare(
+            effective: authorization,
+            capability: Capability.cashCloseWithDifference,
+            grant: authorizationGrant,
+          )
+        : const PreparedSpecialAuthorization.direct();
     final now = DateTime.now().toUtc().toIso8601String();
     await _db.criticalTransaction((tx) async {
       final rows = await tx.query(
@@ -78,9 +108,21 @@ final class CashRepository {
       );
       final expected =
           (r['opening_balance_cents'] as int) + (movements.first['s'] as int);
-      if (countedCents != expected) {
-        authorization.require(Capability.cashCloseWithDifference);
+      if ((countedCents != expected) != hasDifference ||
+          r['global_id'] != current['global_id']) {
+        throw StateError('La caja cambió; vuelve a intentar el cierre.');
       }
+      final authorizationMetadata = hasDifference
+          ? await specialAuthorization.consumeInTransaction(
+              tx,
+              prepared: prepared,
+              effective: authorization,
+              capability: Capability.cashCloseWithDifference,
+              operation: 'CloseWithDifference',
+              entityType: 'CashSession',
+              entityGlobalId: r['global_id'] as String,
+            )
+          : null;
       await tx.update(
         'cash_sessions',
         {
@@ -113,6 +155,7 @@ final class CashRepository {
           'countedCashCents': countedCents,
           'expectedCashCents': expected,
           'differenceCents': countedCents - expected,
+          'authorization': ?authorizationMetadata,
         }),
         'created_at': now,
       });

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/features/inventory/domain/fifo.dart';
@@ -66,18 +67,35 @@ final class InventoryRepository {
     required int productId,
     required int delta,
     required String reason,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     if (delta == 0) throw ArgumentError('El ajuste no puede ser cero.');
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.inventoryAdjust);
+    if (reason.trim().isEmpty) throw ArgumentError('El motivo es obligatorio.');
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.inventoryAdjust,
+      grant: authorizationGrant,
+    );
     final ctx = authorization.context!;
     final now = DateTime.now().toUtc().toIso8601String();
+    final gid = _ids.newId();
     await _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.inventoryAdjust,
+            operation: 'Create',
+            entityType: 'InventoryAdjustment',
+            entityGlobalId: gid,
+          );
       final before = await stockInTx(tx, productId, ctx.branchId);
       if (before + delta < 0) {
         throw StateError('Stock insuficiente para el ajuste.');
       }
-      final gid = _ids.newId();
       final productGid = await productGlobal(tx, productId);
       String? newLotGid;
       int? unitCost;
@@ -156,6 +174,7 @@ final class InventoryRepository {
           'newLotGlobalId': newLotGid,
           'unitCostCents': unitCost,
           'allocations': allocations,
+          'authorization': ?authorizationMetadata,
         }),
         'created_at': now,
       });

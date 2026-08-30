@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/capability.dart';
 import 'package:pos_app/features/cash/data/cash_read_repository.dart';
 import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/shared/presentation/database_list_screen.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
+import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 
 class CashScreen extends StatelessWidget {
   const CashScreen({super.key});
@@ -44,8 +46,16 @@ class CashScreen extends StatelessWidget {
                     'Efectivo contado centavos',
                   ]);
                   if (values != null) {
-                    await CashRepository(appDatabase)
-                        .close(int.parse(values[0]));
+                    if (!context.mounted) return;
+                    await runWithSpecialAuthorization(
+                      context: context,
+                      capability: Capability.cashCloseWithDifference,
+                      operationLabel: 'Cerrar caja con diferencia',
+                      reason: 'Cierre de caja con diferencia',
+                      operation: (grant) => CashRepository(
+                        appDatabase,
+                      ).close(int.parse(values[0]), authorizationGrant: grant),
+                    );
                   }
                 },
                 child: const Text('Cerrar'),

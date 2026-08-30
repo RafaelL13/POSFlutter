@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
@@ -27,6 +28,7 @@ final class PosRepository {
     required String paymentMethod,
     int discountCents = 0,
     int? receivedCents,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     if (lines.isEmpty) throw StateError('La venta no puede estar vacía.');
     for (final l in lines) {
@@ -34,11 +36,18 @@ final class PosRepository {
         throw StateError('Las cantidades deben ser enteras positivas.');
       }
     }
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.saleCreate);
-    if (discountCents > 0) authorization.require(Capability.saleDiscount);
-    final ctx = authorization.context!;
     final totals = calculateSaleTotals(lines, discountCents: discountCents);
+    final authorization = await AuthorizationService(_db).load();
+    authorization.require(Capability.saleCreate);
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final discountAuthorization = discountCents > 0
+        ? await specialAuthorization.prepare(
+            effective: authorization,
+            capability: Capability.saleDiscount,
+            grant: authorizationGrant,
+          )
+        : const PreparedSpecialAuthorization.direct();
+    final ctx = authorization.context!;
     if (paymentMethod == 'Cash' && (receivedCents ?? 0) < totals.totalCents) {
       throw StateError('Efectivo recibido insuficiente.');
     }
@@ -47,6 +56,17 @@ final class PosRepository {
     final idem = _ids.newId();
     var fifoCost = 0;
     return _db.criticalTransaction((tx) async {
+      final authorizationMetadata = discountCents > 0
+          ? await specialAuthorization.consumeInTransaction(
+              tx,
+              prepared: discountAuthorization,
+              effective: authorization,
+              capability: Capability.saleDiscount,
+              operation: 'CreateWithDiscount',
+              entityType: 'Sale',
+              entityGlobalId: saleGid,
+            )
+          : null;
       final cash = await tx.query(
         'cash_sessions',
         where: "device_id=? AND status='Open'",
@@ -178,6 +198,8 @@ final class PosRepository {
         'user_id': ctx.userId,
         'device_id': ctx.deviceId,
         'created_at': now,
+        if (authorizationMetadata != null)
+          'details_json': jsonEncode({'authorization': authorizationMetadata}),
       });
       final payload = {
         'globalId': saleGid,
@@ -199,6 +221,7 @@ final class PosRepository {
             ? (receivedCents! - totals.totalCents)
             : 0,
         'lines': linePayloads,
+        'authorization': ?authorizationMetadata,
       };
       await tx.insert('sync_queue', {
         'global_id': _ids.newId(),

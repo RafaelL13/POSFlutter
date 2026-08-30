@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/capability.dart';
 import 'package:pos_app/features/inventory/data/inventory_read_repository.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
 import 'package:pos_app/shared/presentation/database_list_screen.dart';
+import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 
 class InventoryScreen extends StatelessWidget {
   const InventoryScreen({super.key});
@@ -18,10 +20,18 @@ class InventoryScreen extends StatelessWidget {
         'Motivo',
       ]);
       if (values != null) {
-        await InventoryRepository(appDatabase).adjust(
-          productId: int.parse(values[0]),
-          delta: int.parse(values[1]),
+        if (!dialogContext.mounted) return;
+        await runWithSpecialAuthorization(
+          context: dialogContext,
+          capability: Capability.inventoryAdjust,
+          operationLabel: 'Ajustar inventario',
           reason: values[2],
+          operation: (grant) => InventoryRepository(appDatabase).adjust(
+            productId: int.parse(values[0]),
+            delta: int.parse(values[1]),
+            reason: values[2],
+            authorizationGrant: grant,
+          ),
         );
       }
     },

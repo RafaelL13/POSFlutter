@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 
@@ -35,6 +36,67 @@ final class CatalogRepository {
     'minimum_stock': minimumStock,
     'active': 1,
   });
+  Future<void> changeProductPrice({
+    required int productId,
+    required int salePriceCents,
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async {
+    if (salePriceCents < 0) throw ArgumentError('Precio inválido.');
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.productPriceChange,
+      grant: authorizationGrant,
+    );
+    final ctx = authorization.context!;
+    final db = await _db.open();
+    final products = await db.query(
+      'products',
+      columns: ['global_id'],
+      where: 'id=? AND business_id=?',
+      whereArgs: [productId, ctx.businessId],
+      limit: 1,
+    );
+    if (products.isEmpty) throw StateError('Producto inexistente.');
+    final productGlobalId = products.first['global_id'] as String;
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.productPriceChange,
+            operation: 'ChangePrice',
+            entityType: 'Product',
+            entityGlobalId: productGlobalId,
+          );
+      final updated = await tx.update(
+        'products',
+        {'sale_price_cents': salePriceCents, 'updated_at': now},
+        where: 'id=? AND business_id=?',
+        whereArgs: [productId, ctx.businessId],
+      );
+      if (updated != 1) throw StateError('Producto inexistente.');
+      await tx.insert('sync_queue', {
+        'global_id': _ids.newId(),
+        'entity_type': 'Product',
+        'entity_global_id': productGlobalId,
+        'operation': 'Update',
+        'payload_version': 1,
+        'payload_json': jsonEncode({
+          'globalId': productGlobalId,
+          'businessGlobalId': ctx.businessGlobalId,
+          'salePriceCents': salePriceCents,
+          'updatedAt': now,
+          'authorization': ?authorizationMetadata,
+        }),
+        'created_at': now,
+      });
+    });
+  }
+
   Future<String> _create(
     Capability capability,
     String type,

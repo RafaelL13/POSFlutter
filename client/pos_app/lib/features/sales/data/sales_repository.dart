@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 
@@ -10,9 +11,18 @@ final class SalesRepository {
     : _ids = ids ?? const UuidV7Generator();
   final AppDatabase _db;
   final IdGenerator _ids;
-  Future<void> cancel(String saleGlobalId, String reason) async {
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.saleCancel);
+  Future<void> cancel(
+    String saleGlobalId,
+    String reason, {
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async {
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.saleCancel,
+      grant: authorizationGrant,
+    );
     final ctx = authorization.context!;
     final now = DateTime.now().toUtc().toIso8601String();
     await _db.criticalTransaction((tx) async {
@@ -25,6 +35,16 @@ final class SalesRepository {
       if (sales.isEmpty) throw StateError('Venta inexistente.');
       final sale = sales.first;
       if (sale['status'] == 'Cancelled') return;
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.saleCancel,
+            operation: 'Cancel',
+            entityType: 'Sale',
+            entityGlobalId: saleGlobalId,
+          );
       final details = await tx.query(
         'sale_details',
         where: 'sale_id=?',
@@ -105,7 +125,10 @@ final class SalesRepository {
         'user_id': ctx.userId,
         'device_id': ctx.deviceId,
         'created_at': now,
-        'details_json': jsonEncode({'reason': reason}),
+        'details_json': jsonEncode({
+          'reason': reason,
+          'authorization': ?authorizationMetadata,
+        }),
       });
       await tx.insert('sync_queue', {
         'global_id': _ids.newId(),
@@ -120,6 +143,7 @@ final class SalesRepository {
           'branchGlobalId': ctx.branchGlobalId,
           'deviceGlobalId': ctx.deviceGlobalId,
           'userGlobalId': ctx.userGlobalId,
+          'authorization': ?authorizationMetadata,
         }),
         'created_at': now,
       });
