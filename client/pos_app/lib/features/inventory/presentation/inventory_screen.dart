@@ -12,6 +12,8 @@ class InventoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DatabaseListScreen(
     title: 'Inventario',
+    subtitle: 'Consulta existencias y registra ajustes autorizados.',
+    actionLabel: 'Ajustar inventario',
     loadRows: InventoryReadRepository(appDatabase).availability,
     action: (dialogContext) async {
       final values = await textForm(dialogContext, 'Ajuste de inventario', [

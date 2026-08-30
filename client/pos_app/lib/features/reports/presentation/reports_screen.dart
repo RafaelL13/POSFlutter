@@ -3,29 +3,34 @@ import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/reports/data/csv_export_service.dart';
 import 'package:pos_app/features/reports/data/report_repository.dart';
-import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
+import 'package:pos_app/core/design/components/app_components.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Reportes')),
-    drawer: const AppNavigationDrawer(),
+  Widget build(BuildContext context) => AppPage(
+    title: 'Reportes',
+    subtitle: 'Indicadores operativos del día.',
+    scrollable: false,
     body: FutureBuilder(
       future: ReportRepository(appDatabase).today(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const AppLoadingState(label: 'Calculando indicadores…');
         }
         final metrics = snapshot.data!;
         return ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            ListTile(
-              title: const Text('Ventas hoy'),
-              trailing: Text(formatMoney(metrics.salesCents)),
+            AppCard(
+              child: ListTile(
+                title: const Text('Ventas hoy'),
+                trailing: Text(formatMoney(metrics.salesCents)),
+              ),
             ),
+            const SizedBox(height: AppSpacing.sm),
             ListTile(
               title: const Text('Operaciones'),
               trailing: Text('${metrics.operations}'),
@@ -55,7 +60,10 @@ class ReportsScreen extends StatelessWidget {
                 title: const Text('Margen'),
                 trailing: Text('${(value / 100).toStringAsFixed(2)}%'),
               ),
-            FilledButton(
+            const SizedBox(height: AppSpacing.lg),
+            AppPrimaryButton(
+              label: 'Exportar ventas CSV',
+              icon: Icons.download_outlined,
               onPressed: () async {
                 final file = await CsvExportService(appDatabase).sales();
                 if (context.mounted) {
@@ -64,7 +72,6 @@ class ReportsScreen extends StatelessWidget {
                   ).showSnackBar(SnackBar(content: Text('CSV: ${file.path}')));
                 }
               },
-              child: const Text('Exportar ventas CSV'),
             ),
           ],
         );

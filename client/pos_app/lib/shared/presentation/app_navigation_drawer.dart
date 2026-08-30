@@ -5,6 +5,7 @@ import 'package:pos_app/app/navigation_model.dart';
 import 'package:pos_app/core/authorization/authorization_providers.dart';
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/sync/presentation/sync_status_panel.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
 
 class AppNavigationDrawer extends ConsumerWidget {
   const AppNavigationDrawer({this.capabilities, this.currentRoute, super.key});
@@ -59,8 +60,39 @@ class _NavigationDrawer extends StatelessWidget {
     final route = currentRoute ?? GoRouterState.of(context).uri.path;
     return Drawer(
       child: ListView(
+        padding: EdgeInsets.zero,
         children: [
-          const DrawerHeader(child: Text('POS Flutter')),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.xxl,
+              AppSpacing.xl,
+              AppSpacing.lg,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.storefront,
+                  size: 32,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'POS Flutter',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    Text(
+                      'Operación comercial',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           for (
             var sectionIndex = 0;
             sectionIndex < sections.length;
@@ -70,8 +102,11 @@ class _NavigationDrawer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Text(
-                sections[sectionIndex].title,
-                style: Theme.of(context).textTheme.labelMedium,
+                sections[sectionIndex].title.toUpperCase(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  letterSpacing: .7,
+                ),
               ),
             ),
             for (final item in sections[sectionIndex].items)

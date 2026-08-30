@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
-import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
+import 'package:pos_app/core/design/components/app_components.dart';
 
 class DatabaseListScreen extends StatefulWidget {
   const DatabaseListScreen({
@@ -9,12 +10,16 @@ class DatabaseListScreen extends StatefulWidget {
     this.query,
     this.loadRows,
     this.action,
+    this.subtitle,
+    this.actionLabel,
     this.showNavigation = true,
   }) : assert((query == null) != (loadRows == null));
   final String title;
   final String? query;
   final Future<List<Map<String, Object?>>> Function()? loadRows;
   final Future<void> Function(BuildContext)? action;
+  final String? subtitle;
+  final String? actionLabel;
   final bool showNavigation;
   @override
   State<DatabaseListScreen> createState() => _DatabaseListScreenState();
@@ -28,34 +33,57 @@ class _DatabaseListScreenState extends State<DatabaseListScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
-    drawer: widget.showNavigation ? const AppNavigationDrawer() : null,
-    floatingActionButton: widget.action == null
+  Widget build(BuildContext context) => AppPage(
+    title: widget.title,
+    subtitle:
+        widget.subtitle ?? 'Consulta y administra la información disponible.',
+    showNavigation: widget.showNavigation,
+    scrollable: false,
+    primaryAction: widget.action == null
         ? null
-        : FloatingActionButton(
+        : AppPrimaryButton(
+            label: widget.actionLabel ?? 'Nuevo registro',
+            icon: Icons.add,
             onPressed: () async {
               await widget.action!(context);
               if (mounted) setState(() {});
             },
-            child: const Icon(Icons.add),
           ),
-    body: FutureBuilder(
+    body: FutureBuilder<List<Map<String, Object?>>>(
       future: _load(),
       builder: (c, s) {
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
+        if (s.hasError) return AppErrorState(onRetry: () => setState(() {}));
+        if (!s.hasData) return const AppLoadingState();
         final rows = s.data!;
-        if (rows.isEmpty) return const Center(child: Text('Sin registros'));
-        return ListView.builder(
-          itemCount: rows.length,
-          itemBuilder: (_, i) => ListTile(
-            title: Text(rows[i].values.skip(1).take(2).join(' · ')),
-            subtitle: Text(rows[i].toString()),
+        if (rows.isEmpty) {
+          return AppEmptyState(
+            message: 'No hay ${widget.title.toLowerCase()} registrados.',
+          );
+        }
+        return Card(
+          child: ListView.separated(
+            itemCount: rows.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (_, i) => ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
+              title: Text(rows[i].values.skip(1).take(2).join(' · ')),
+              subtitle: Text(_humanReadable(rows[i])),
+            ),
           ),
         );
       },
     ),
   );
+
+  String _humanReadable(Map<String, Object?> row) => row.entries
+      .skip(1)
+      .map(
+        (entry) => '${entry.key.replaceAll('_', ' ')}: ${entry.value ?? '—'}',
+      )
+      .join(' · ');
 }
 
 Future<List<String>?> textForm(
@@ -69,23 +97,23 @@ Future<List<String>?> textForm(
   );
   final result = await showDialog<List<String>>(
     context: context,
-    builder: (d) => AlertDialog(
-      title: Text(title),
+    builder: (d) => AppDialog(
+      title: title,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < labels.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: TextField(
+              child: AppTextField(
+                label: labels[i],
                 controller: controllers[i],
-                keyboardType: labels[i].toLowerCase().contains('cent')
-                    ? TextInputType.number
+                keyboardType: _numericLabel(labels[i])
+                    ? const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      )
                     : null,
-                decoration: InputDecoration(
-                  labelText: labels[i],
-                  border: const OutlineInputBorder(),
-                ),
               ),
             ),
         ],
@@ -95,10 +123,10 @@ Future<List<String>?> textForm(
           onPressed: () => Navigator.pop(d),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
+        AppPrimaryButton(
+          label: 'Guardar',
           onPressed: () =>
               Navigator.pop(d, controllers.map((e) => e.text).toList()),
-          child: const Text('Guardar'),
         ),
       ],
     ),
@@ -107,4 +135,18 @@ Future<List<String>?> textForm(
     c.dispose();
   }
   return result;
+}
+
+bool _numericLabel(String label) {
+  final value = label.toLowerCase();
+  return [
+    'cantidad',
+    'precio',
+    'costo',
+    'monto',
+    'saldo',
+    'efectivo',
+    'stock',
+    ' id',
+  ].any(value.contains);
 }

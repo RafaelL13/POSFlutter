@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/cash/data/cash_read_repository.dart';
 import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/shared/presentation/database_list_screen.dart';
-import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
+import 'package:pos_app/core/design/components/app_components.dart';
 
 class CashScreen extends StatelessWidget {
   const CashScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Caja')),
-    drawer: const AppNavigationDrawer(),
+  Widget build(BuildContext context) => AppPage(
+    title: 'Caja',
+    subtitle: 'Consulta sesiones y controla la operación de efectivo.',
+    scrollable: false,
     body: Column(
       children: [
         Expanded(
@@ -24,26 +27,29 @@ class CashScreen extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.only(top: AppSpacing.md),
           child: Wrap(
             spacing: 12,
             children: [
-              FilledButton(
+              AppPrimaryButton(
+                label: 'Abrir caja',
+                icon: Icons.lock_open_outlined,
                 onPressed: () async {
                   final values = await textForm(context, 'Abrir caja', [
-                    'Saldo inicial centavos',
+                    'Saldo inicial (MXN)',
                   ]);
                   if (values != null) {
                     await CashRepository(appDatabase)
-                        .open(int.parse(values[0]));
+                        .open(parseMoneyToCents(values[0]));
                   }
                 },
-                child: const Text('Abrir'),
               ),
-              OutlinedButton(
+              AppSecondaryButton(
+                label: 'Cerrar caja',
+                icon: Icons.lock_outline,
                 onPressed: () async {
                   final values = await textForm(context, 'Cerrar caja', [
-                    'Efectivo contado centavos',
+                    'Efectivo contado (MXN)',
                   ]);
                   if (values != null) {
                     if (!context.mounted) return;
@@ -52,13 +58,13 @@ class CashScreen extends StatelessWidget {
                       capability: Capability.cashCloseWithDifference,
                       operationLabel: 'Cerrar caja con diferencia',
                       reason: 'Cierre de caja con diferencia',
-                      operation: (grant) => CashRepository(
-                        appDatabase,
-                      ).close(int.parse(values[0]), authorizationGrant: grant),
+                      operation: (grant) => CashRepository(appDatabase).close(
+                        parseMoneyToCents(values[0]),
+                        authorizationGrant: grant,
+                      ),
                     );
                   }
                 },
-                child: const Text('Cerrar'),
               ),
             ],
           ),

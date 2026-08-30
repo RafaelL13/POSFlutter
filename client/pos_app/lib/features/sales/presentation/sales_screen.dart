@@ -12,6 +12,8 @@ class SalesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DatabaseListScreen(
     title: 'Ventas',
+    subtitle: 'Consulta el historial de ventas del negocio.',
+    actionLabel: 'Cancelar venta',
     loadRows: SalesReadRepository(appDatabase).list,
     action: (dialogContext) async {
       final values = await textForm(dialogContext, 'Cancelar venta', [

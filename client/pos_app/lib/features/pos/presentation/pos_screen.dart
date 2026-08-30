@@ -4,6 +4,8 @@ import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
+import 'package:pos_app/core/design/app_breakpoints.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -113,9 +115,12 @@ class _PosScreenState extends State<PosScreen> {
         onPressed: addProduct,
         child: const Icon(Icons.add),
       ),
-      body: Row(
-        children: [
-          Expanded(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              AppBreakpoints.ofWidth(constraints.maxWidth) ==
+              AppLayoutSize.compact;
+          final cart = Expanded(
             child: ListView.builder(
               itemCount: lines.length,
               itemBuilder: (context, index) {
@@ -152,12 +157,13 @@ class _PosScreenState extends State<PosScreen> {
                 );
               },
             ),
-          ),
-          SizedBox(
-            width: 320,
+          );
+          final checkout = SizedBox(
+            width: compact ? double.infinity : 320,
+            height: compact ? 190 : null,
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -180,8 +186,26 @@ class _PosScreenState extends State<PosScreen> {
                 ),
               ),
             ),
-          ),
-        ],
+          );
+          return Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: compact
+                ? Column(
+                    children: [
+                      cart,
+                      const SizedBox(height: AppSpacing.sm),
+                      checkout,
+                    ],
+                  )
+                : Row(
+                    children: [
+                      cart,
+                      const SizedBox(width: AppSpacing.md),
+                      checkout,
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }

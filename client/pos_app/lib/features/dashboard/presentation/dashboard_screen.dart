@@ -4,6 +4,7 @@ import 'package:pos_app/features/dashboard/data/home_repository.dart';
 import 'package:pos_app/features/dashboard/presentation/home_content.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 import 'package:pos_app/sync/sync_health.dart';
+import 'package:pos_app/core/design/components/app_components.dart';
 
 typedef HomeSummaryLoader = Future<HomeSummary> Function();
 
@@ -21,46 +22,31 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Inicio')),
+    appBar: AppBar(title: const Text('POS Flutter')),
     drawer: summary == null
         ? const AppNavigationDrawer()
         : AppNavigationDrawer(
             capabilities: summary!.capabilities,
             currentRoute: '/dashboard',
           ),
-    body: summary != null
-        ? HomeContent(summary: summary!, syncSummary: syncSummary)
-        : FutureBuilder<HomeSummary>(
-            future: (loader ?? HomeRepository(appDatabase).load)(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) return const _HomeLoadError();
-              final value = snapshot.data;
-              if (value == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              return HomeContent(summary: value, syncSummary: syncSummary);
-            },
-          ),
-  );
-}
-
-class _HomeLoadError extends StatelessWidget {
-  const _HomeLoadError();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-    child: Padding(
-      padding: EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.home_work_outlined, size: 44),
-          SizedBox(height: 12),
-          Text('No fue posible cargar el resumen local.'),
-          SizedBox(height: 4),
-          Text('Puedes seguir usando las opciones disponibles en el menú.'),
-        ],
-      ),
+    body: SafeArea(
+      child: summary != null
+          ? HomeContent(summary: summary!, syncSummary: syncSummary)
+          : FutureBuilder<HomeSummary>(
+              future: (loader ?? HomeRepository(appDatabase).load)(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const AppErrorState(
+                    message: 'No fue posible cargar el resumen local. Puedes seguir usando las opciones disponibles en el menú.',
+                  );
+                }
+                final value = snapshot.data;
+                if (value == null) {
+                  return const AppLoadingState(label: 'Preparando tu inicio…');
+                }
+                return HomeContent(summary: value, syncSummary: syncSummary);
+              },
+            ),
     ),
   );
 }

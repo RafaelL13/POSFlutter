@@ -8,6 +8,10 @@ import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/dashboard/data/home_repository.dart';
 import 'package:pos_app/sync/presentation/sync_status_panel.dart';
 import 'package:pos_app/sync/sync_health.dart';
+import 'package:pos_app/core/design/app_breakpoints.dart';
+import 'package:pos_app/core/design/app_spacing.dart';
+import 'package:pos_app/core/design/app_radius.dart';
+import 'package:pos_app/core/design/components/app_components.dart';
 
 final class HomeAction {
   const HomeAction({
@@ -112,10 +116,16 @@ class HomeContent extends StatelessWidget {
     final actions = visibleHomeActions(capabilities);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
-        final horizontal = wide ? 32.0 : 16.0;
+        final layout = AppBreakpoints.ofWidth(constraints.maxWidth);
+        final wide = layout == AppLayoutSize.expanded;
+        final horizontal = wide ? AppSpacing.xxl : AppSpacing.md;
         return ListView(
-          padding: EdgeInsets.fromLTRB(horizontal, 20, horizontal, 32),
+          padding: EdgeInsets.fromLTRB(
+            horizontal,
+            AppSpacing.lg,
+            horizontal,
+            AppSpacing.xxl,
+          ),
           children: [
             _HomeHeader(summary: summary),
             const SizedBox(height: 20),
@@ -238,22 +248,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       itemBuilder: (_, index) {
         final item = items[index];
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(item.$3),
-                const SizedBox(height: 8),
-                Text(item.$1),
-                const SizedBox(height: 4),
-                Text(item.$2, style: Theme.of(context).textTheme.titleLarge),
-              ],
-            ),
-          ),
-        );
+        return AppKpiCard(label: item.$1, value: item.$2, icon: item.$3);
       },
     );
   }
@@ -281,7 +276,7 @@ class _QuickActionGrid extends StatelessWidget {
         child: InkWell(
           key: Key('home-action-${action.route}'),
           onTap: () => context.go(action.route),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.medium),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

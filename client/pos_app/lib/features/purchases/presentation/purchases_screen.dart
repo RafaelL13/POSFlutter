@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/purchases/data/purchase_read_repository.dart';
 import 'package:pos_app/features/purchases/data/purchase_repository.dart';
 import 'package:pos_app/shared/presentation/database_list_screen.dart';
@@ -10,6 +11,8 @@ class PurchasesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DatabaseListScreen(
     title: 'Compras',
+    subtitle: 'Consulta entradas y registra nuevas compras.',
+    actionLabel: 'Nueva compra',
     loadRows: PurchaseReadRepository(appDatabase).list,
     action: (dialogContext) async {
       final values = await textForm(dialogContext, 'Registrar compra', [
@@ -18,7 +21,7 @@ class PurchasesScreen extends StatelessWidget {
         'Product ID',
         'Product GID',
         'Cantidad',
-        'Costo centavos',
+        'Costo unitario (MXN)',
       ]);
       if (values != null) {
         await PurchaseRepository(appDatabase).create(
@@ -29,7 +32,7 @@ class PurchasesScreen extends StatelessWidget {
               int.parse(values[2]),
               values[3],
               int.parse(values[4]),
-              int.parse(values[5]),
+              parseMoneyToCents(values[5]),
             ),
           ],
         );
