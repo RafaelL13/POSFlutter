@@ -90,7 +90,7 @@ void main() {
             capabilities: effective,
           ),
         ),
-        '/pos',
+        '/dashboard',
       );
     });
   }

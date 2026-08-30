@@ -61,11 +61,7 @@ void main() {
           'Reportes',
         ]),
       );
-      for (final hidden in [
-        'Usuarios',
-        'Respaldos',
-        'Administración nube',
-      ]) {
+      for (final hidden in ['Usuarios', 'Respaldos', 'Administración nube']) {
         expect(labels, isNot(contains(hidden)));
       }
     });
@@ -193,6 +189,7 @@ void main() {
 
     expect(find.text('Nueva venta'), findsNothing);
     expect(find.text('Productos'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Inventario'), 250);
     expect(find.text('Inventario'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Reportes'), 250);
     expect(find.text('Reportes'), findsOneWidget);
@@ -221,10 +218,7 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('Dispositivos'), findsOneWidget);
-    expect(
-      find.byTooltip('Invitar dispositivo administrativo'),
-      findsNothing,
-    );
+    expect(find.byTooltip('Invitar dispositivo administrativo'), findsNothing);
   });
 }
 

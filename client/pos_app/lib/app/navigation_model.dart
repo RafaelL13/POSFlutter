@@ -26,6 +26,11 @@ const appNavigationSections = <AppNavigationSection>[
     title: 'OPERACIÓN',
     items: [
       AppNavigationItem(
+        label: 'Inicio',
+        icon: Icons.home_outlined,
+        route: '/dashboard',
+      ),
+      AppNavigationItem(
         label: 'Nueva venta',
         icon: Icons.point_of_sale,
         route: '/pos',

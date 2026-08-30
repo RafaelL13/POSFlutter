@@ -58,4 +58,17 @@ final class InventoryReadRepository {
     );
     return rows.single['value']! as int;
   }
+
+  Future<int> totalAvailableUnits() async {
+    final authorization = await AuthorizationService(_db)
+        .require(Capability.inventoryAvailabilityRead);
+    final context = authorization.context!;
+    final database = await _db.open();
+    final rows = await database.rawQuery(
+      '''SELECT COALESCE(SUM(available_quantity), 0) AS units
+         FROM inventory_lots WHERE branch_id = ? AND active = 1''',
+      [context.branchId],
+    );
+    return rows.single['units']! as int;
+  }
 }

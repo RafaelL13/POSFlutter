@@ -18,7 +18,7 @@ final class RouteAccessState {
 
 abstract final class RouteAuthorization {
   static const Map<String, Set<Capability>> protectedRoutes = {
-    '/dashboard': {Capability.reportsOperational},
+    '/dashboard': {Capability.posAccess},
     '/pos': {Capability.saleCreate},
     '/products': {Capability.productRead},
     '/categories': {Capability.categoryRead},

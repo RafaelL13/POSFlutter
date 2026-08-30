@@ -1,49 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
-import 'package:pos_app/core/utils/money.dart';
-import 'package:pos_app/features/reports/data/report_repository.dart';
+import 'package:pos_app/features/dashboard/data/home_repository.dart';
+import 'package:pos_app/features/dashboard/presentation/home_content.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
+import 'package:pos_app/sync/sync_health.dart';
+
+typedef HomeSummaryLoader = Future<HomeSummary> Function();
 
 class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({
+    this.summary,
+    this.loader,
+    this.syncSummary,
+    super.key,
+  });
+
+  final HomeSummary? summary;
+  final HomeSummaryLoader? loader;
+  final SyncSummary? syncSummary;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Dashboard')),
-    drawer: const AppNavigationDrawer(),
-    body: FutureBuilder(
-      future: ReportRepository(appDatabase).today(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final metrics = snapshot.data!;
-        return GridView.count(
-          padding: const EdgeInsets.all(20),
-          crossAxisCount: 3,
-          childAspectRatio: 2.4,
-          children: [
-            _card('Ventas', formatMoney(metrics.salesCents)),
-            _card('Operaciones', '${metrics.operations}'),
-            if (metrics.fifoCostCents case final value?)
-              _card('Costo FIFO', formatMoney(value)),
-            if (metrics.grossProfitCents case final value?)
-              _card('Utilidad bruta', formatMoney(value)),
-            if (metrics.expensesCents case final value?)
-              _card('Gastos', formatMoney(value)),
-            if (metrics.resultCents case final value?)
-              _card('Resultado', formatMoney(value)),
-          ],
-        );
-      },
-    ),
+    appBar: AppBar(title: const Text('Inicio')),
+    drawer: summary == null
+        ? const AppNavigationDrawer()
+        : AppNavigationDrawer(
+            capabilities: summary!.capabilities,
+            currentRoute: '/dashboard',
+          ),
+    body: summary != null
+        ? HomeContent(summary: summary!, syncSummary: syncSummary)
+        : FutureBuilder<HomeSummary>(
+            future: (loader ?? HomeRepository(appDatabase).load)(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) return const _HomeLoadError();
+              final value = snapshot.data;
+              if (value == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return HomeContent(summary: value, syncSummary: syncSummary);
+            },
+          ),
   );
+}
 
-  Widget _card(String title, String value) => Card(
-    child: Center(
-      child: ListTile(
-        title: Text(title),
-        subtitle: Text(value, style: const TextStyle(fontSize: 24)),
+class _HomeLoadError extends StatelessWidget {
+  const _HomeLoadError();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.home_work_outlined, size: 44),
+          SizedBox(height: 12),
+          Text('No fue posible cargar el resumen local.'),
+          SizedBox(height: 4),
+          Text('Puedes seguir usando las opciones disponibles en el menú.'),
+        ],
       ),
     ),
   );

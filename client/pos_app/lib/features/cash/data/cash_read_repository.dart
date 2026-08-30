@@ -32,4 +32,23 @@ final class CashReadRepository {
       orderBy: 'id DESC',
     );
   }
+
+  Future<bool> hasOpenSession() async {
+    final authorization = await AuthorizationService(_db)
+        .require(Capability.cashRead);
+    final context = authorization.context!;
+    final ownOnly =
+        authorization.permissionFor(Capability.cashRead) ==
+        PermissionLevel.ownOnly;
+    final database = await _db.open();
+    final rows = await database.rawQuery(
+      '''SELECT EXISTS(
+           SELECT 1 FROM cash_sessions
+           WHERE branch_id = ? AND device_id = ? AND status = 'Open'
+           ${ownOnly ? 'AND user_id = ?' : ''}
+         ) AS is_open''',
+      [context.branchId, context.deviceId, if (ownOnly) context.userId],
+    );
+    return rows.single['is_open'] == 1;
+  }
 }

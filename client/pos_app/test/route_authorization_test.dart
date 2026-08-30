@@ -32,35 +32,44 @@ void main() {
 
     test('an unclassified route fails closed to the authorized home', () {
       final access = _access(role: 'Seller');
-      expect(RouteAuthorization.redirect('/unclassified', access), '/pos');
+      expect(
+        RouteAuthorization.redirect('/unclassified', access),
+        '/dashboard',
+      );
     });
 
-    test('Seller receives POS home and cannot open privileged routes', () {
-      final access = _access(role: 'Seller');
-      expect(RouteAuthorization.authorizedHome(access.capabilities), '/pos');
-      for (final path in [
-        '/pos',
-        '/products',
-        '/categories',
-        '/inventory',
-        '/sales',
-        '/cash',
-      ]) {
-        expect(RouteAuthorization.redirect(path, access), isNull);
-      }
-      expect(RouteAuthorization.redirect('/dashboard', access), '/pos');
-      for (final path in [
-        '/suppliers',
-        '/purchases',
-        '/expenses',
-        '/reports',
-        '/users',
-        '/backup',
-        '/cloud-admin',
-      ]) {
-        expect(RouteAuthorization.redirect(path, access), '/pos');
-      }
-    });
+    test(
+      'Seller receives capability home and cannot open privileged routes',
+      () {
+        final access = _access(role: 'Seller');
+        expect(
+          RouteAuthorization.authorizedHome(access.capabilities),
+          '/dashboard',
+        );
+        for (final path in [
+          '/dashboard',
+          '/pos',
+          '/products',
+          '/categories',
+          '/inventory',
+          '/sales',
+          '/cash',
+        ]) {
+          expect(RouteAuthorization.redirect(path, access), isNull);
+        }
+        for (final path in [
+          '/suppliers',
+          '/purchases',
+          '/expenses',
+          '/reports',
+          '/users',
+          '/backup',
+          '/cloud-admin',
+        ]) {
+          expect(RouteAuthorization.redirect(path, access), '/dashboard');
+        }
+      },
+    );
 
     test('Supervisor can use operational routes but not privileged routes', () {
       final access = _access(role: 'Supervisor');
@@ -166,7 +175,7 @@ void main() {
 
     router.go('/users');
     await tester.pumpAndSettle();
-    expect(find.text('/pos'), findsOneWidget);
+    expect(find.text('/dashboard'), findsOneWidget);
 
     access = _access(role: 'Administrator');
     router.go('/cloud-admin/reports/profit');
