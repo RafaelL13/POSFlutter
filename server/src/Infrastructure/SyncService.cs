@@ -605,7 +605,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             cancellationToken))
             throw new InvalidOperationException("Referenced product has not been synchronized yet.");
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         var previousStock = await _db.InventoryLots.AsNoTracking()
             .Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId && x.ProductGlobalId == payload.ProductGlobalId && x.Active)
             .SumAsync(x => (int?)x.AvailableQuantity, cancellationToken) ?? 0;
@@ -683,7 +683,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             x => x.BusinessId == tenant.BusinessId && x.GlobalId == payload.GlobalId,
             cancellationToken)) return;
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         _db.Expenses.Add(new Expense
         {
             GlobalId = payload.GlobalId,
@@ -719,7 +719,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             cancellationToken))
             throw new InvalidOperationException($"Referenced supplier {payload.SupplierGlobalId} has not been synchronized yet.");
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var purchase = new Purchase
         {
@@ -822,7 +822,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             (payload.ClosedAt is null || payload.CountedCashCents is null || payload.ExpectedCashCents is null || payload.DifferenceCents is null))
             throw new ArgumentException("Closed cash session is incomplete.");
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         var entity = await _db.CashSessions.SingleOrDefaultAsync(
             x => x.BusinessId == tenant.BusinessId && x.GlobalId == payload.GlobalId,
             cancellationToken);
@@ -881,7 +881,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             throw new ArgumentException("Invalid payment method.");
         if (payload.Lines.Count == 0) throw new ArgumentException("Sale must contain at least one line.");
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         var sale = new Sale
         {
             GlobalId = payload.GlobalId,
@@ -1016,7 +1016,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         if (sale.Status == "Cancelled") return;
         if (sale.Status != "Confirmed") throw new ArgumentException("Only confirmed sales can be cancelled.");
 
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant.BusinessId, cancellationToken);
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         foreach (var line in sale.Lines)
         {
             var previousStock = await _db.InventoryLots.AsNoTracking()
@@ -1124,10 +1124,21 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             throw new ArgumentException("Payload does not belong to the authenticated tenant.");
     }
 
-    private async Task<long> RequiredTenantUserIdAsync(Guid userGlobalId, long businessId, CancellationToken cancellationToken)
+    private async Task<long> RequiredTenantUserIdAsync(
+        Guid userGlobalId,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
     {
+        if (userGlobalId != tenant.UserGlobalId)
+            throw new UnauthorizedAccessException(
+                "Operation user does not match the authenticated user.");
+
         var id = await _db.Users.AsNoTracking()
-            .Where(x => x.BusinessId == businessId && x.GlobalId == userGlobalId && x.Active)
+            .Where(x => x.BusinessId == tenant.BusinessId &&
+                        x.Id == tenant.UserId &&
+                        x.GlobalId == userGlobalId &&
+                        x.Active &&
+                        x.Role == tenant.Role)
             .Select(x => x.Id)
             .SingleOrDefaultAsync(cancellationToken);
         if (id == 0) throw new InvalidOperationException($"Referenced user {userGlobalId} has not been synchronized yet.");
