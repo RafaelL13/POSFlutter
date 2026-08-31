@@ -2,7 +2,30 @@
 
 POSFlutter is a reconstructed, offline-first point-of-sale system designed first for Android tablets. The store's operational database is local SQLite; cloud connectivity is complementary and must never prevent sales.
 
-This repository is the **controlled-reconstruction baseline** created after loss of a prior ephemeral runtime. It does not claim that reconstructed files are byte-identical to the lost originals. See `RECOVERY_MANIFEST.md` and `RECONSTRUCTION_REPORT.md` for provenance and validation details.
+The repository originated as a controlled reconstruction and has since evolved into the production-candidate codebase. Historical provenance remains in `RECOVERY_MANIFEST.md` and `RECONSTRUCTION_REPORT.md`.
+
+## Production release
+
+Current candidate: **1.0.0+1**, Android package `com.posflutter.pos_app`, SQLite schema V5. Android release builds retain the controlled certificate documented in `docs/release/android_signing.md`.
+
+The client API endpoint is a compile-time environment value. Production artifacts must be built with an explicit HTTPS URL:
+
+```powershell
+C:\Dev\flutter\bin\flutter.bat build apk --release --dart-define=API_BASE_URL=https://api.example.com
+```
+
+Replace the example with the deployment URL. Do not distribute an artifact built with the emulator default. Backend SQL and JWT secrets are supplied through environment configuration, never committed.
+
+Release runbooks:
+
+- `docs/release/production_readiness_map.md`
+- `docs/release/android_installation.md`
+- `docs/release/offline_operations.md`
+- `docs/release/backup_restore.md`
+- `docs/release/server_deployment.md`
+- `docs/release/store_rollout.md`
+- `docs/release/production_checklist.md`
+- `docs/release/uat_checklist.md`
 
 ## Repository layout
 
@@ -84,7 +107,7 @@ Validated on the canonical Windows working copy with:
 - android.builtInKotlin=false.
 - android.newDsl=false.
 
-Actually executed:
+Canonical validation commands:
 
 ```text
 flutter pub get
@@ -93,14 +116,7 @@ flutter test
 flutter build apk --debug
 ```
 
-Results:
-
-- flutter pub get: PASS.
-- flutter analyze: PASS, 0 issues.
-- flutter test: 22/22 PASS.
-- flutter build apk --debug: PASS.
-- Debug APK size: 190,927,071 bytes.
-- Debug APK SHA-256: `4E239606C37C4941E2BFAE041A8CEB8507CF5F0D416236955F3E29881EACE8E5`.
+Exact FASE 19 results, checksums and release artifacts are recorded in the external release manifest. Test counts elsewhere in this document describe historical reconstruction checkpoints rather than the current gate.
 
 Android runtime validation was executed on a Pixel Tablet AVD using Android 17 / API 37. The application successfully opened the real SQLite database and completed the offline-first operational flow without Internet connectivity.
 
