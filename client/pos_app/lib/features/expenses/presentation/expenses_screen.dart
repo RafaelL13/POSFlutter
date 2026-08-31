@@ -23,7 +23,9 @@ class ExpensesScreen extends StatelessWidget {
         await ExpenseRepository(
           appDatabase,
         ).create(concept: values[0], amountCents: parseMoneyToCents(values[1]));
+        return true;
       }
+      return false;
     },
   );
 }

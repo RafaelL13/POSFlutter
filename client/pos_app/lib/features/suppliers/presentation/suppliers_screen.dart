@@ -15,7 +15,9 @@ class SuppliersScreen extends StatelessWidget {
       final v = await textForm(c, 'Nuevo proveedor', ['Nombre']);
       if (v != null && v.first.trim().isNotEmpty) {
         await CatalogRepository(appDatabase).addSupplier(v.first);
+        return true;
       }
+      return false;
     },
   );
 }

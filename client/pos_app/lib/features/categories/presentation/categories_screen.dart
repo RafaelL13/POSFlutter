@@ -15,7 +15,9 @@ class CategoriesScreen extends StatelessWidget {
       final v = await textForm(c, 'Nueva categoría', ['Nombre']);
       if (v != null && v.first.trim().isNotEmpty) {
         await CatalogRepository(appDatabase).addCategory(v.first);
+        return true;
       }
+      return false;
     },
   );
 }

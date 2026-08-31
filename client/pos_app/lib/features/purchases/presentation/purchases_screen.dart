@@ -36,7 +36,9 @@ class PurchasesScreen extends StatelessWidget {
             ),
           ],
         );
+        return true;
       }
+      return false;
     },
   );
 }

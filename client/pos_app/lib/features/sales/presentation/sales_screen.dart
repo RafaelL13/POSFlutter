@@ -21,7 +21,7 @@ class SalesScreen extends StatelessWidget {
         'Motivo',
       ]);
       if (values != null) {
-        if (!dialogContext.mounted) return;
+        if (!dialogContext.mounted) return false;
         await runWithSpecialAuthorization(
           context: dialogContext,
           capability: Capability.saleCancel,
@@ -31,7 +31,9 @@ class SalesScreen extends StatelessWidget {
               SalesRepository(appDatabase)
                   .cancel(values[0], values[1], authorizationGrant: grant),
         );
+        return true;
       }
+      return false;
     },
   );
 }

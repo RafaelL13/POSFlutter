@@ -180,6 +180,11 @@ class AppTextField extends StatelessWidget {
     this.keyboardType,
     this.helperText,
     this.required = false,
+    this.validator,
+    this.enabled = true,
+    this.autofocus = false,
+    this.textInputAction,
+    this.onFieldSubmitted,
     super.key,
   });
   final String label;
@@ -188,11 +193,21 @@ class AppTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final String? helperText;
   final bool required;
+  final String? Function(String?)? validator;
+  final bool enabled;
+  final bool autofocus;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
   @override
-  Widget build(BuildContext context) => TextField(
+  Widget build(BuildContext context) => TextFormField(
     controller: controller,
     obscureText: obscureText,
     keyboardType: keyboardType,
+    validator: validator,
+    enabled: enabled,
+    autofocus: autofocus,
+    textInputAction: textInputAction,
+    onFieldSubmitted: onFieldSubmitted,
     decoration: InputDecoration(
       labelText: required ? '$label *' : label,
       helperText: helperText,

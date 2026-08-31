@@ -17,6 +17,11 @@ class ReportsScreen extends StatelessWidget {
     body: FutureBuilder(
       future: ReportRepository(appDatabase).today(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const AppErrorState(
+            message: 'No fue posible calcular los indicadores del día.',
+          );
+        }
         if (!snapshot.hasData) {
           return const AppLoadingState(label: 'Calculando indicadores…');
         }

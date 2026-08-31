@@ -26,7 +26,9 @@ class ProductsScreen extends StatelessWidget {
           salePriceCents: parseMoneyToCents(values[2]),
           minimumStock: int.tryParse(values[3]) ?? 0,
         );
+        return true;
       }
+      return false;
     },
   );
 }

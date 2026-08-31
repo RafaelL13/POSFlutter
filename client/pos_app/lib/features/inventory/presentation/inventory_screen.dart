@@ -22,7 +22,7 @@ class InventoryScreen extends StatelessWidget {
         'Motivo',
       ]);
       if (values != null) {
-        if (!dialogContext.mounted) return;
+        if (!dialogContext.mounted) return false;
         await runWithSpecialAuthorization(
           context: dialogContext,
           capability: Capability.inventoryAdjust,
@@ -35,7 +35,9 @@ class InventoryScreen extends StatelessWidget {
             authorizationGrant: grant,
           ),
         );
+        return true;
       }
+      return false;
     },
   );
 }
