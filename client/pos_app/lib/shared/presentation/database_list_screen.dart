@@ -239,10 +239,12 @@ String? _validateField(String? rawValue, TextFormFieldSpec field) {
   if (!field.numeric || value.isEmpty) return null;
   final number = num.tryParse(value.replaceAll(',', '.'));
   if (number == null) return 'Ingresa un número válido.';
-  if (!field.allowNegative && number < 0)
+  if (!field.allowNegative && number < 0) {
     return 'El valor no puede ser negativo.';
-  if (!field.allowZero && number == 0)
+  }
+  if (!field.allowZero && number == 0) {
     return 'El valor debe ser mayor que cero.';
+  }
   return null;
 }
 

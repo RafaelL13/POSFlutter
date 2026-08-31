@@ -95,7 +95,7 @@ app.MapPost("/api/bootstrap",async(BootstrapRequest r,PosDbContext db,TokenServi
  var b=new Business{GlobalId=r.BusinessGlobalId,Name=r.BusinessName.Trim(),Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.Businesses.Add(b);await db.SaveChangesAsync(ct);
  var br=new Branch{GlobalId=r.BranchGlobalId,BusinessId=b.Id,Name=r.BranchName.Trim(),Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.Branches.Add(br);await db.SaveChangesAsync(ct);
  var d=new Device{GlobalId=r.DeviceGlobalId,BranchId=br.Id,Name=r.DeviceName.Trim(),Mode="PointOfSale",Active=true,CreatedAt=now,LastSyncAt=now,ServerVersion=1};
- var u=new UserAccount{GlobalId=r.UserGlobalId,BusinessId=b.Id,Name=r.UserName.Trim(),Username=r.Username.Trim(),PasswordHash=r.PasswordHash,PasswordSalt=r.PasswordSalt,Role="Administrator",Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.AddRange(d,u);await db.SaveChangesAsync(ct);
+ var u=new UserAccount{GlobalId=r.UserGlobalId,BusinessId=b.Id,Name=r.UserDisplayName.Trim(),Username=r.Username.Trim(),PasswordHash=r.PasswordHash,PasswordSalt=r.PasswordSalt,Role="Administrator",Active=true,CreatedAt=now,UpdatedAt=now,ServerVersion=1};db.AddRange(d,u);await db.SaveChangesAsync(ct);
  var auth=await tokens.IssueForBootstrapAsync(b.GlobalId,br.GlobalId,d.GlobalId,u.GlobalId,ct); if(auth is null){await tx.RollbackAsync(ct);return Results.Conflict();}
  await tx.CommitAsync(ct);return Results.Ok(auth);
 });

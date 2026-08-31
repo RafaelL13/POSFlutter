@@ -1,7 +1,7 @@
 name: pos_app
 description: POS offline-first para tablet Android con sincronizacion a ASP.NET Core.
 publish_to: none
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.13.0 <4.0.0'

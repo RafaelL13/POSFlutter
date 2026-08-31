@@ -24,7 +24,7 @@ public static class SyncErrorCodes
 public sealed record LoginRequest(Guid BusinessGlobalId,Guid DeviceGlobalId,string Username,string Password);
 public sealed record RefreshRequest(string RefreshToken);
 public sealed record AuthResponse(string AccessToken,string RefreshToken,DateTimeOffset AccessTokenExpiresAt,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,string DeviceMode,Guid UserGlobalId,string Role);
-public sealed record BootstrapRequest(Guid BusinessGlobalId,string BusinessName,Guid BranchGlobalId,string BranchName,Guid DeviceGlobalId,string DeviceName,Guid UserGlobalId,string UserName,string Username,string PasswordHash,string PasswordSalt);
+public sealed record BootstrapRequest(Guid BusinessGlobalId,string BusinessName,Guid BranchGlobalId,string BranchName,Guid DeviceGlobalId,string DeviceName,Guid UserGlobalId,string UserDisplayName,string Username,string PasswordHash,string PasswordSalt);
 public sealed record CreateDeviceEnrollmentRequest(int? ExpiresInMinutes);
 public sealed record RedeemDeviceEnrollmentRequest(string Token,string Username,string Password,string DeviceName,Guid DeviceGlobalId);
 public sealed record DeviceEnrollmentInvitation(string Code,Guid BusinessGlobalId,Guid BranchGlobalId,DateTimeOffset ExpiresAt);
