@@ -15,6 +15,12 @@
 - [ ] Bundle/clone/recovery build reproducibles.
 - [ ] UAT registrada por separado.
 
+Procedimientos pendientes de ejecución externa:
+
+- `sql_server_backup.md`: backup central y restore verificado.
+- `first_production_device.md`: primera tablet y UAT offline-first.
+- `phase19_status.md`: evidencia consolidada y blockers actuales.
+
 ## Rollback APK
 
 No desinstale inmediatamente si existen datos no sincronizados. Detenga nuevas operaciones, revise `SyncQueue`, cree respaldo local y sincronice si es posible. Sólo instale una APK anterior con la misma firma y schema compatible. Después compruebe DB, caja, inventario y ventas. Si no es compatible, restaure mediante el procedimiento formal; nunca borre la base para “hacer funcionar” el downgrade.

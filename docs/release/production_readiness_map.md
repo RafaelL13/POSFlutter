@@ -1,13 +1,13 @@
 # Production readiness map
 
-Auditoría de FASE 19 sobre `22b0384b651d2ea1eb3ae52ac62841cf896c085f`.
+Auditoría actualizada de FASE 19 sobre `6ca83d2482fd6f518456724a72539bbb1fc290f1`.
 
 | AREA | CURRENT_STATE | RISK | PRODUCTION_REQUIREMENT | ACTION_REQUIRED | SEVERITY |
 |---|---|---|---|---|---|
 | Git | `main` limpio y sincronizado | Bajo | Fuente reproducible | Verificar al cierre | BLOCKING |
-| Versión Android | `0.1.0+1` | Media | Identidad productiva estable | Adoptar `1.0.0+1`; conservar versionCode 1 | BLOCKING |
-| Firma | Keystore externo, fallback debug prohibido | Bajo | Misma identidad y secretos externos | Verificar APK y segunda copia | BLOCKING |
-| API Flutter | `API_BASE_URL` por dart-define; default de emulador | Alta | URL HTTPS real por despliegue | Compilar artefacto con URL productiva | BLOCKING |
+| Versión Android | `1.0.0+1` | Bajo | Identidad productiva estable | Mantener para primera producción | KEEP |
+| Firma | Keystore externo, fallback debug prohibido y segunda copia verificada | Bajo | Misma identidad y secretos externos | Mantener copias seguras | KEEP |
+| API Flutter | Release construido con `API_BASE_URL=https://api.lasaguilasmercadodelmar.com`; health público 200/Healthy | Bajo | URL HTTPS real por despliegue | Mantener dart-define en cada build productivo | KEEP |
 | Backend config | SQL/JWT vacíos en Git; startup fail-closed | Bajo | Secretos por ambiente | Documentar variables y HTTPS | BLOCKING |
 | JWT/autorización | Issuer/audience/lifetime/tenant y roles validados | Bajo | Mantener políticas probadas | Regresión completa | BLOCKING |
 | HTTPS | Redirección backend; cliente sin bypass TLS | Bajo | Certificado válido/reverse proxy | Documentar despliegue | BLOCKING |
@@ -16,9 +16,10 @@ Auditoría de FASE 19 sobre `22b0384b651d2ea1eb3ae52ac62841cf896c085f`.
 | Offline/FIFO/caja | Persistencia y autorización cubiertas | Bajo | Venta sin red y reinicio seguro | Acceptance automatizada/evidencia | BLOCKING |
 | Sync | Outbox, idempotencia, rechazo terminal y cursor probados | Bajo | Sin pérdida/duplicados | Regresión cliente/servidor | BLOCKING |
 | Backup/restore | Integridad, reauth y copia preventiva | Bajo | Runbook y prueba | Documentar y ejecutar tests | BLOCKING |
-| Backend publish | Build/test disponibles | Media | Publish Release reproducible | Ejecutar publish y startup smoke | BLOCKING |
+| Backend publish | Publish/startup smoke ejecutados; IIS loopback `127.0.0.1:8080` tras Cloudflare Tunnel | Bajo | Publish Release reproducible | Mantener despliegue sin listener público en 8080 | KEEP |
 | Dependencias | Sin inventario final | Media | Auditar vulnerabilidades/obsolescencia | Ejecutar herramientas, no upgrade masivo | BLOCKING |
 | Kotlin plugin | Warning de compatibilidad futura | Bajo | Release actual compila | Registrar deuda, no migrar al final | NON_BLOCKING |
-| Dispositivo/UAT | Depende de ADB y validación humana | Media | Smoke si hay dispositivo; UAT separado | Detectar ADB y entregar checklist | NON_BLOCKING |
+| Dispositivo/UAT | AVD limpio pasó install/launch; tablet física y UAT no ejecutadas | Alta operativa | Primera tablet y UAT reales | Ejecutar checklist externo antes de aprobación productiva | BLOCKING |
+| SQL Server backup | No hay evidencia de backup/restore productivo ejecutado | Alta operativa | Full backup, copia separada y restore verificado | Ejecutar `sql_server_backup.md` con identidad administrativa | BLOCKING |
 
-No se autoriza cerrar como candidata mientras exista un hallazgo crítico/alto abierto o el APK no use un endpoint HTTPS de despliegue explícito.
+No se autoriza cerrar FASE 19 mientras el backup/restore central, la primera tablet y el UAT offline-first permanezcan pendientes. El endpoint HTTPS y el smoke Android ya están resueltos.
