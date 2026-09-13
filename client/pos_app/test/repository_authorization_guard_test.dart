@@ -7,6 +7,7 @@ import 'package:pos_app/features/catalog/data/catalog_repository.dart';
 import 'package:pos_app/features/expenses/data/expense_repository.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/features/purchases/data/purchase_repository.dart';
 import 'package:pos_app/features/sales/data/sales_repository.dart';
@@ -145,15 +146,20 @@ void main() {
     addTearDown(database.close);
 
     await _expectDenied(
-      PosRepository(database).completeSale([
-        CartLine(
-          productId: 999,
-          productGlobalId: 'product-denied',
-          name: 'Denied',
-          quantity: 1,
-          unitPriceCents: 100,
-        ),
-      ], paymentMethod: 'Card'),
+      PosRepository(database).completeSale(
+        [
+          CartLine(
+            productId: 999,
+            productGlobalId: 'product-denied',
+            name: 'Denied',
+            quantity: 1,
+            unitPriceCents: 100,
+          ),
+        ],
+        payments: const [
+          SalePaymentInput(method: PaymentMethod.card, amountCents: 100),
+        ],
+      ),
     );
     await _expectDenied(SalesRepository(database).cancel('sale-denied', 'x'));
     await _expectDenied(

@@ -81,7 +81,23 @@ final class SalesRepository {
           });
         }
       }
-      if (sale['payment_method'] == 'Cash') {
+      final paymentRows = await tx.query(
+        'sale_payments',
+        columns: ['method', 'amount_cents'],
+        where: 'sale_id=?',
+        whereArgs: [sale['id']],
+      );
+      final cashCents = paymentRows.isEmpty
+          ? sale['payment_method'] == 'Cash'
+                ? sale['total_cents'] as int
+                : 0
+          : paymentRows
+                .where((payment) => payment['method'] == 'Cash')
+                .fold<int>(
+                  0,
+                  (total, payment) => total + (payment['amount_cents'] as int),
+                );
+      if (cashCents > 0) {
         final cash = await tx.query(
           'cash_sessions',
           where: "device_id=? AND status='Open'",
@@ -99,7 +115,7 @@ final class SalesRepository {
           'cash_session_id': cash.first['id'],
           'movement_date': now,
           'type': 'Cancellation',
-          'amount_cents': -(sale['total_cents'] as int),
+          'amount_cents': -cashCents,
           'reference_global_id': saleGlobalId,
           'user_id': ctx.userId,
           'notes': reason,

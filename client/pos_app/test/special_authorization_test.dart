@@ -12,6 +12,7 @@ import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/features/catalog/data/catalog_repository.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/features/sales/data/sales_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -363,11 +364,17 @@ void main() {
           quantity: 1,
           unitPriceCents: 100,
         );
-        await repository.completeSale([line], paymentMethod: 'Card');
+        const card = SalePaymentInput(
+          method: PaymentMethod.card,
+          amountCents: 100,
+        );
+        await repository.completeSale([line], payments: const [card]);
         await expectLater(
           repository.completeSale(
             [line],
-            paymentMethod: 'Card',
+            payments: const [
+              SalePaymentInput(method: PaymentMethod.card, amountCents: 90),
+            ],
             discountCents: 10,
           ),
           throwsA(isA<AdditionalAuthorizationRequiredException>()),
@@ -376,7 +383,9 @@ void main() {
         final grant = await fixture.authorize(Capability.saleDiscount);
         await repository.completeSale(
           [line],
-          paymentMethod: 'Card',
+          payments: const [
+            SalePaymentInput(method: PaymentMethod.card, amountCents: 90),
+          ],
           discountCents: 10,
           authorizationGrant: grant,
         );
@@ -384,7 +393,7 @@ void main() {
         await expectLater(
           repository.completeSale(
             [line],
-            paymentMethod: 'Card',
+            payments: const [card],
             discountCents: 101,
           ),
           throwsA(anything),
@@ -392,7 +401,9 @@ void main() {
         await fixture.useActor('manager');
         await repository.completeSale(
           [line],
-          paymentMethod: 'Card',
+          payments: const [
+            SalePaymentInput(method: PaymentMethod.card, amountCents: 95),
+          ],
           discountCents: 5,
         );
         expect(await fixture.count('sales'), 3);

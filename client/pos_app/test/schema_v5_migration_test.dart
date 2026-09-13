@@ -12,7 +12,7 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  test('fresh V5 contains persistent sync classification columns', () async {
+  test('fresh current schema retains V5 sync classification columns', () async {
     final database = AppDatabase(
       factory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
@@ -22,14 +22,14 @@ void main() {
     final columns = await db.rawQuery('PRAGMA table_info(sync_queue)');
     final names = columns.map((row) => row['name']).toSet();
 
-    expect(await db.getVersion(), 5);
+    expect(await db.getVersion(), 6);
     expect(
       names,
       containsAll(['error_category', 'error_code', 'requires_action']),
     );
   });
 
-  test('upgrade V4 to V5 preserves pending operation and defaults', () async {
+  test('upgrade from V4 preserves V5 pending operation defaults', () async {
     final directory = await Directory.systemTemp.createTemp(
       'pos_v5_migration_',
     );
@@ -77,7 +77,7 @@ void main() {
       whereArgs: ['pending-v4'],
     )).single;
 
-    expect(await upgraded.getVersion(), 5);
+    expect(await upgraded.getVersion(), 6);
     expect(row['status'], 'Error');
     expect(row['retry_count'], 2);
     expect(row['error_message'], 'Legacy error');

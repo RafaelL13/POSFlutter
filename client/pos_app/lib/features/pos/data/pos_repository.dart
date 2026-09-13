@@ -8,6 +8,7 @@ import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
 import 'package:pos_app/features/inventory/domain/fifo.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 
 final class CompletedSale {
   const CompletedSale(this.globalId, this.totalCents, this.fifoCostCents);
@@ -25,7 +26,7 @@ final class PosRepository {
   final InventoryRepository _inventory;
   Future<CompletedSale> completeSale(
     List<CartLine> lines, {
-    required String paymentMethod,
+    required List<SalePaymentInput> payments,
     int discountCents = 0,
     int? receivedCents,
     SpecialAuthorizationGrant? authorizationGrant,
@@ -48,8 +49,16 @@ final class PosRepository {
           )
         : const PreparedSpecialAuthorization.direct();
     final ctx = authorization.context!;
-    if (paymentMethod == 'Cash' && (receivedCents ?? 0) < totals.totalCents) {
+    final validPayments = SalePaymentRules.validate(
+      payments,
+      totalCents: totals.totalCents,
+    );
+    final cashCents = SalePaymentRules.cashCents(validPayments);
+    if (cashCents > 0 && (receivedCents ?? 0) < cashCents) {
       throw StateError('Efectivo recibido insuficiente.');
+    }
+    if (cashCents == 0 && receivedCents != null) {
+      throw StateError('Una venta sin efectivo no admite monto recibido.');
     }
     final now = DateTime.now().toUtc().toIso8601String();
     final saleGid = _ids.newId();
@@ -74,7 +83,7 @@ final class PosRepository {
         orderBy: 'id DESC',
         limit: 1,
       );
-      if (paymentMethod == 'Cash' && cash.isEmpty) {
+      if (cashCents > 0 && cash.isEmpty) {
         throw StateError('Debe abrir caja antes de vender en efectivo.');
       }
       final saleId = await tx.insert('sales', {
@@ -90,15 +99,29 @@ final class PosRepository {
         'total_cents': totals.totalCents,
         'fifo_cost_cents': 0,
         'gross_profit_cents': 0,
-        'payment_method': paymentMethod,
+        'payment_method': SalePaymentRules.legacySummary(validPayments),
         'received_cents': receivedCents,
-        'change_cents': paymentMethod == 'Cash'
-            ? (receivedCents! - totals.totalCents)
-            : 0,
-        'status': 'Confirmed',
+        'change_cents': cashCents > 0 ? (receivedCents! - cashCents) : 0,
+        'status': 'PendingPayment',
         'created_at': now,
         'updated_at': now,
       });
+      final paymentPayloads = <Map<String, Object?>>[];
+      for (final payment in validPayments) {
+        final paymentGlobalId = _ids.newId();
+        await tx.insert('sale_payments', {
+          'global_id': paymentGlobalId,
+          'sale_id': saleId,
+          'method': payment.method.storageValue,
+          'amount_cents': payment.amountCents,
+          'created_at': now,
+        });
+        paymentPayloads.add({
+          'globalId': paymentGlobalId,
+          'method': payment.method.storageValue,
+          'amountCents': payment.amountCents,
+        });
+      }
       final linePayloads = <Map<String, Object?>>[];
       for (final line in lines) {
         final before = await _inventory.stockInTx(
@@ -175,17 +198,18 @@ final class PosRepository {
         {
           'fifo_cost_cents': fifoCost,
           'gross_profit_cents': totals.totalCents - fifoCost,
+          'status': 'Confirmed',
         },
         where: 'id=?',
         whereArgs: [saleId],
       );
-      if (paymentMethod == 'Cash') {
+      if (cashCents > 0) {
         await tx.insert('cash_movements', {
           'global_id': _ids.newId(),
           'cash_session_id': cash.first['id'],
           'movement_date': now,
           'type': 'Sale',
-          'amount_cents': totals.totalCents,
+          'amount_cents': cashCents,
           'reference_global_id': saleGid,
           'user_id': ctx.userId,
         });
@@ -215,11 +239,10 @@ final class PosRepository {
         'totalCents': totals.totalCents,
         'fifoCostCents': fifoCost,
         'grossProfitCents': totals.totalCents - fifoCost,
-        'paymentMethod': paymentMethod,
+        'paymentMethod': SalePaymentRules.legacySummary(validPayments),
         'receivedCents': receivedCents,
-        'changeCents': paymentMethod == 'Cash'
-            ? (receivedCents! - totals.totalCents)
-            : 0,
+        'changeCents': cashCents > 0 ? (receivedCents! - cashCents) : 0,
+        'payments': paymentPayloads,
         'lines': linePayloads,
         'authorization': ?authorizationMetadata,
       };
@@ -228,7 +251,7 @@ final class PosRepository {
         'entity_type': 'Sale',
         'entity_global_id': saleGid,
         'operation': 'Create',
-        'payload_version': 1,
+        'payload_version': 2,
         'payload_json': jsonEncode(payload),
         'created_at': now,
       });

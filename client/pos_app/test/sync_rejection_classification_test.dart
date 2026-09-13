@@ -3,6 +3,7 @@ import 'package:pos_app/core/network/cloud_api_client.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/sync/sync_error.dart';
 import 'package:pos_app/sync/sync_operation.dart';
@@ -308,7 +309,9 @@ void main() {
             unitPriceCents: 100,
           ),
         ],
-        paymentMethod: 'Cash',
+        payments: const [
+          SalePaymentInput(method: PaymentMethod.cash, amountCents: 200),
+        ],
         receivedCents: 200,
       );
       final saleRow = (await fixture.db.query(

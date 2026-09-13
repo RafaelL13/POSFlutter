@@ -38,7 +38,7 @@ def fifo_allocate(db, product_id, branch_id, quantity):
     return allocations,cost
 
 def main():
-    v1=read_statements(DB/'schema_v1.dart'); v2=read_statements(DB/'schema_v2.dart'); v3=read_statements(DB/'schema_v3.dart'); v4=read_statements(DB/'schema_v4.dart'); v5=read_statements(DB/'schema_v5.dart')
+    v1=read_statements(DB/'schema_v1.dart'); v2=read_statements(DB/'schema_v2.dart'); v3=read_statements(DB/'schema_v3.dart'); v4=read_statements(DB/'schema_v4.dart'); v5=read_statements(DB/'schema_v5.dart'); v6=read_statements(DB/'schema_v6.dart')
     with tempfile.TemporaryDirectory() as td:
         path=Path(td)/'migration.db'
         db=sqlite3.connect(path); db.execute('PRAGMA foreign_keys=ON'); exec_all(db,v1)
@@ -58,7 +58,7 @@ def main():
         db.execute("INSERT INTO sale_detail_lots(global_id,sale_detail_id,inventory_lot_id,quantity,unit_cost_cents,total_cost_cents) VALUES('sdl-gid',?,?,1,1200,1200)",(sd,lot))
         db.commit()
         before={'business':db.execute('SELECT global_id,name FROM businesses').fetchone(),'device':db.execute('SELECT global_id FROM devices').fetchone(),'product':db.execute('SELECT global_id,sale_price_cents,minimum_stock FROM products').fetchone(),'sale':db.execute('SELECT global_id,total_cents,fifo_cost_cents FROM sales').fetchone(),'lot':db.execute('SELECT global_id,initial_quantity,available_quantity,unit_cost_cents FROM inventory_lots').fetchone()}
-        exec_all(db,v2); db.execute("UPDATE app_settings SET value='123' WHERE key='sync_pull_cursor'"); exec_all(db,v3); exec_all(db,v4); exec_all(db,v5); db.commit(); db.close()
+        exec_all(db,v2); db.execute("UPDATE app_settings SET value='123' WHERE key='sync_pull_cursor'"); exec_all(db,v3); exec_all(db,v4); exec_all(db,v5); exec_all(db,v6); db.commit(); db.close()
         db=sqlite3.connect(path); db.execute('PRAGMA foreign_keys=ON')
         assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
@@ -67,6 +67,8 @@ def main():
         assert db.execute("SELECT mode FROM devices WHERE global_id='device-gid'").fetchone()[0]=='PointOfSale'
         assert db.execute("SELECT value FROM app_settings WHERE key='sync_pull_cursor'").fetchone()[0]=='123'
         assert db.execute('SELECT server_version FROM products').fetchone()[0]==0
+        assert db.execute("SELECT global_id,sale_id,method,amount_cents FROM sale_payments WHERE sale_id=?",(sale,)).fetchone()==('sale-gid',sale,'Cash',18050)
+        assert db.execute("SELECT COUNT(*) FROM sale_payments WHERE sale_id=?",(sale,)).fetchone()[0]==1
         assert db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='special_authorization_grants'").fetchone()[0]=='special_authorization_grants'
         db.execute("INSERT INTO special_authorization_grants(global_id,capability,requirement,performed_by_user_global_id,authorized_by_user_global_id,business_global_id,device_global_id,reason,authorized_at) VALUES('grant-1','saleCancel','SecondUserAuthorization','user-gid','manager-gid','business-gid','device-gid','Reason',?)",(now,)); db.commit()
         assert db.execute("UPDATE special_authorization_grants SET consumed_at=?,operation='Cancel',entity_type='Sale',entity_global_id='sale-gid' WHERE global_id='grant-1' AND consumed_at IS NULL",(now,)).rowcount==1
@@ -120,9 +122,9 @@ def main():
     try: fifo_allocate(db,1,1,8); raise AssertionError('insufficient FIFO stock accepted')
     except ValueError: pass
     print('SQLITE_VALIDATION=PASS')
-    print(f'V1_STATEMENTS={len(v1)} V2_STATEMENTS={len(v2)} V3_STATEMENTS={len(v3)} V4_STATEMENTS={len(v4)} V5_STATEMENTS={len(v5)}')
+    print(f'V1_STATEMENTS={len(v1)} V2_STATEMENTS={len(v2)} V3_STATEMENTS={len(v3)} V4_STATEMENTS={len(v4)} V5_STATEMENTS={len(v5)} V6_STATEMENTS={len(v6)}')
     print('INTEGRITY=ok FOREIGN_KEYS=ok DATA_PRESERVED=yes DEVICE_MODE=PointOfSale CURSOR=123')
-    print('ROLLBACK=verified CONFLICT=verified INTEGER_CONSTRAINTS=verified ENROLLMENT_DEVICE_ID=verified GRANT_REPLAY=blocked TERMINAL_SYNC_RETRY=blocked')
+    print('ROLLBACK=verified CONFLICT=verified INTEGER_CONSTRAINTS=verified ENROLLMENT_DEVICE_ID=verified GRANT_REPLAY=blocked TERMINAL_SYNC_RETRY=blocked LEGACY_PAYMENT=backfilled PAYMENT_MIGRATION=idempotent')
     print('FIFO_CASE1=cost300_remaining7 FIFO_CASE2=cost440_remainingB3 FIFO_CASE3=rejected')
 
 if __name__=='__main__': main()

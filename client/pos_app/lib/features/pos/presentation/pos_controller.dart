@@ -4,11 +4,12 @@ import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/features/pos/data/pos_catalog_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 
 typedef PosBootstrapLoader = Future<PosBootstrap> Function();
 typedef PosSaleCompleter = Future<CompletedSale> Function(
   List<CartLine> lines, {
-  required String paymentMethod,
+  required List<SalePaymentInput> payments,
   int discountCents,
   int? receivedCents,
   SpecialAuthorizationGrant? authorizationGrant,
@@ -169,7 +170,12 @@ final class PosController extends ChangeNotifier {
     try {
       final sale = await _completeSale(
         List<CartLine>.unmodifiable(lines),
-        paymentMethod: 'Cash',
+        payments: [
+          SalePaymentInput(
+            method: PaymentMethod.cash,
+            amountCents: totals.totalCents,
+          ),
+        ],
         discountCents: discountCents,
         receivedCents: receivedCents,
         authorizationGrant: authorizationGrant,

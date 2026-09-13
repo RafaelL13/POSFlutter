@@ -295,7 +295,7 @@ Future<PosController> _controller({
     completeSale:
         (
           lines, {
-          required paymentMethod,
+          required payments,
           discountCents = 0,
           receivedCents,
           authorizationGrant,
