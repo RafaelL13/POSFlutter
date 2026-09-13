@@ -7,6 +7,7 @@ import 'package:pos_app/core/design/app_colors.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
 import 'package:pos_app/core/utils/money.dart';
+import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/data/pos_catalog_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
@@ -66,11 +67,20 @@ class _PosScreenState extends State<PosScreen> {
         title: const Text('Nueva venta'),
         actions: [
           if (controller.lines.isNotEmpty)
-            TextButton.icon(
-              onPressed: _clearCart,
-              icon: const Icon(Icons.delete_sweep_outlined),
-              label: const Text('Vaciar venta'),
-            ),
+            if (MediaQuery.sizeOf(context).width < 600)
+              IconButton(
+                key: const Key('pos-clear-sale'),
+                tooltip: 'Vaciar venta',
+                onPressed: _clearCart,
+                icon: const Icon(Icons.delete_sweep_outlined),
+              )
+            else
+              TextButton.icon(
+                key: const Key('pos-clear-sale'),
+                onPressed: _clearCart,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('Vaciar venta'),
+              ),
           const SizedBox(width: AppSpacing.xs),
         ],
       ),
@@ -108,7 +118,6 @@ class _PosScreenState extends State<PosScreen> {
               final cart = _CartPanel(
                 controller: controller,
                 onCheckout: _checkout,
-                onClear: _clearCart,
                 onInvalidQuantity: _invalidQuantity,
               );
               if (!landscape && constraints.maxHeight < 900) {
@@ -160,10 +169,19 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _checkout() async {
-    if (controller.bootstrap?.cashOpen != true) {
-      _message('Necesitas abrir caja antes de vender.');
+    if (!controller.canCheckout) {
+      final reason = controller.checkoutBlockReason;
+      if (reason != null) _message(reason);
       return;
     }
+
+    final paymentLabel = _paymentModeLabel(controller.paymentMode);
+    final paymentBreakdown = List<SalePaymentInput>.of(
+      controller.paymentInputs,
+    );
+    final hadCash = controller.cashPaymentCents > 0;
+    final changeCents = controller.changeCents;
+
     CompletedSale? completed;
     final ok = await runWithSpecialAuthorization(
       context: context,
@@ -195,6 +213,18 @@ class _PosScreenState extends State<PosScreen> {
               'Total: ${formatMoney(completed!.totalCents)}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: AppSpacing.xs),
+            Text('Forma de pago: $paymentLabel'),
+            const SizedBox(height: AppSpacing.xs),
+            for (final payment in paymentBreakdown)
+              Text(
+                '${_paymentMethodLabel(payment.method)}: '
+                '${formatMoney(payment.amountCents)}',
+              ),
+            if (hadCash) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text('Cambio: ${formatMoney(changeCents)}'),
+            ],
           ],
         ),
         actions: [
@@ -443,13 +473,13 @@ class _CartPanel extends StatelessWidget {
   const _CartPanel({
     required this.controller,
     required this.onCheckout,
-    required this.onClear,
     required this.onInvalidQuantity,
   });
+
   final PosController controller;
   final VoidCallback onCheckout;
-  final VoidCallback onClear;
   final VoidCallback onInvalidQuantity;
+
   @override
   Widget build(BuildContext context) => AppCard(
     child: Column(
@@ -466,6 +496,7 @@ class _CartPanel extends StatelessWidget {
         ),
         const Divider(),
         Expanded(
+          flex: 5,
           child: controller.lines.isEmpty
               ? const AppEmptyState(
                   message: 'Agrega productos para iniciar la venta.',
@@ -482,60 +513,77 @@ class _CartPanel extends StatelessWidget {
                 ),
         ),
         const Divider(),
-        _MoneyRow(label: 'Subtotal', cents: controller.totals.subtotalCents),
-        if (controller.lines.isNotEmpty &&
-            controller.bootstrap!.capabilities.can(Capability.saleDiscount))
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const Key('pos-discount'),
-              onPressed: () => _editDiscount(context),
-              icon: const Icon(Icons.discount_outlined),
-              label: Text(
-                controller.discountCents == 0
-                    ? 'Agregar descuento'
-                    : 'Editar descuento',
-              ),
+        Flexible(
+          flex: 6,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MoneyRow(
+                  label: 'Subtotal',
+                  cents: controller.totals.subtotalCents,
+                ),
+                if (controller.lines.isNotEmpty &&
+                    controller.bootstrap!.capabilities.can(
+                      Capability.saleDiscount,
+                    ))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const Key('pos-discount'),
+                      onPressed: controller.isSubmitting
+                          ? null
+                          : () => _editDiscount(context),
+                      icon: const Icon(Icons.discount_outlined),
+                      label: Text(
+                        controller.discountCents == 0
+                            ? 'Agregar descuento'
+                            : 'Editar descuento',
+                      ),
+                    ),
+                  ),
+                if (controller.discountCents > 0)
+                  _MoneyRow(
+                    label: 'Descuento',
+                    cents: -controller.discountCents,
+                  ),
+                _MoneyRow(
+                  label: 'Total',
+                  cents: controller.totals.totalCents,
+                  emphasized: true,
+                ),
+                if (controller.lines.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  _PaymentSection(controller: controller),
+                ],
+                const SizedBox(height: AppSpacing.sm),
+                SizedBox(
+                  height: 56,
+                  child: AppPrimaryButton(
+                    key: const Key('pos-checkout'),
+                    label: controller.isSubmitting
+                        ? 'Registrando…'
+                        : _checkoutButtonLabel(controller),
+                    icon: Icons.payments_outlined,
+                    onPressed: controller.canCheckout ? onCheckout : null,
+                  ),
+                ),
+                if (!controller.isSubmitting &&
+                    controller.checkoutBlockReason != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Text(
+                      controller.checkoutBlockReason!,
+                      key: const Key('pos-checkout-help'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ),
-        if (controller.discountCents > 0)
-          _MoneyRow(label: 'Descuento', cents: -controller.discountCents),
-        _MoneyRow(
-          label: 'Total',
-          cents: controller.totals.totalCents,
-          emphasized: true,
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        TextFormField(
-          key: const Key('pos-received'),
-          initialValue: controller.receivedCents == 0
-              ? ''
-              : (controller.receivedCents / 100).toStringAsFixed(2),
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Efectivo recibido (MXN)',
-            prefixText: r'$ ',
-          ),
-          onChanged: (value) {
-            try {
-              controller.setReceivedCents(parseMoneyToCents(value));
-            } on Object {
-              controller.setReceivedCents(0);
-            }
-          },
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        _MoneyRow(label: 'Cambio', cents: controller.changeCents),
-        const SizedBox(height: AppSpacing.sm),
-        SizedBox(
-          height: 56,
-          child: AppPrimaryButton(
-            key: const Key('pos-checkout'),
-            label: controller.isSubmitting
-                ? 'Registrando…'
-                : 'Cobrar ${formatMoney(controller.totals.totalCents)}',
-            icon: Icons.payments_outlined,
-            onPressed: controller.canCheckout ? onCheckout : null,
           ),
         ),
       ],
@@ -546,7 +594,7 @@ class _CartPanel extends StatelessWidget {
     final input = TextEditingController(
       text: controller.discountCents == 0
           ? ''
-          : (controller.discountCents / 100).toStringAsFixed(2),
+          : _centsInput(controller.discountCents),
     );
     final value = await showDialog<String>(
       context: context,
@@ -591,6 +639,360 @@ class _CartPanel extends StatelessWidget {
       );
     }
   }
+}
+
+class _PaymentSection extends StatelessWidget {
+  const _PaymentSection({required this.controller});
+
+  final PosController controller;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Forma de pago', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: AppSpacing.xs),
+      Wrap(
+        spacing: AppSpacing.xs,
+        runSpacing: AppSpacing.xs,
+        children: [
+          _PaymentChoice(
+            key: const Key('pos-payment-cash'),
+            label: 'Efectivo',
+            icon: Icons.payments_outlined,
+            selected: controller.paymentMode == PosPaymentMode.cash,
+            enabled: !controller.isSubmitting,
+            onSelected: () => controller.setPaymentMode(PosPaymentMode.cash),
+          ),
+          _PaymentChoice(
+            key: const Key('pos-payment-card'),
+            label: 'Tarjeta',
+            icon: Icons.credit_card_outlined,
+            selected: controller.paymentMode == PosPaymentMode.card,
+            enabled: !controller.isSubmitting,
+            onSelected: () => controller.setPaymentMode(PosPaymentMode.card),
+          ),
+          _PaymentChoice(
+            key: const Key('pos-payment-transfer'),
+            label: 'Transferencia',
+            icon: Icons.account_balance_outlined,
+            selected: controller.paymentMode == PosPaymentMode.transfer,
+            enabled: !controller.isSubmitting,
+            onSelected: () =>
+                controller.setPaymentMode(PosPaymentMode.transfer),
+          ),
+          _PaymentChoice(
+            key: const Key('pos-payment-mixed'),
+            label: 'Mixto',
+            icon: Icons.call_split_outlined,
+            selected: controller.paymentMode == PosPaymentMode.mixed,
+            enabled: !controller.isSubmitting,
+            onSelected: () => controller.setPaymentMode(PosPaymentMode.mixed),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      switch (controller.paymentMode) {
+        PosPaymentMode.cash => _CashTenderEditor(
+          controller: controller,
+          cashDueCents: controller.totals.totalCents,
+        ),
+        PosPaymentMode.card => _SingleNonCashPaymentSummary(
+          icon: Icons.credit_card_outlined,
+          label: 'Tarjeta',
+          totalCents: controller.totals.totalCents,
+          message: 'No modifica el efectivo esperado en caja.',
+        ),
+        PosPaymentMode.transfer => _SingleNonCashPaymentSummary(
+          icon: Icons.account_balance_outlined,
+          label: 'Transferencia',
+          totalCents: controller.totals.totalCents,
+          message: 'No modifica el efectivo esperado en caja.',
+        ),
+        PosPaymentMode.mixed => _MixedPaymentEditor(controller: controller),
+      },
+    ],
+  );
+}
+
+class _PaymentChoice extends StatelessWidget {
+  const _PaymentChoice({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+    super.key,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+    avatar: Icon(icon, size: 18),
+    label: Text(label),
+    selected: selected,
+    onSelected: enabled
+        ? (value) {
+            if (value) onSelected();
+          }
+        : null,
+  );
+}
+
+class _CashTenderEditor extends StatelessWidget {
+  const _CashTenderEditor({
+    required this.controller,
+    required this.cashDueCents,
+  });
+
+  final PosController controller;
+  final int cashDueCents;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
+        key: ValueKey(
+          'pos-received-${controller.paymentInputRevision}-${controller.paymentMode.name}',
+        ),
+        initialValue: controller.receivedCents == 0
+            ? ''
+            : _centsInput(controller.receivedCents),
+        enabled: !controller.isSubmitting,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: 'Efectivo recibido',
+          prefixText: r'$ ',
+          suffixIcon: IconButton(
+            key: const Key('pos-cash-exact'),
+            tooltip: 'Usar importe exacto',
+            onPressed: controller.isSubmitting || cashDueCents <= 0
+                ? null
+                : controller.setReceivedExact,
+            icon: const Icon(Icons.done_all),
+          ),
+        ),
+        onChanged: (value) {
+          try {
+            controller.setReceivedCents(parseMoneyToCents(value));
+          } on Object {
+            controller.setReceivedCents(0);
+          }
+        },
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              'A cubrir en efectivo',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              formatMoney(cashDueCents),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ],
+      ),
+      _MoneyRow(label: 'Cambio', cents: controller.changeCents),
+    ],
+  );
+}
+
+class _SingleNonCashPaymentSummary extends StatelessWidget {
+  const _SingleNonCashPaymentSummary({
+    required this.icon,
+    required this.label,
+    required this.totalCents,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String label;
+  final int totalCents;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '$label por ${formatMoney(totalCents)}',
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$label · ${formatMoney(totalCents)}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(message, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MixedPaymentEditor extends StatelessWidget {
+  const _MixedPaymentEditor({required this.controller});
+
+  final PosController controller;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _PaymentAmountField(
+        fieldKey: 'pos-mixed-cash',
+        label: 'Efectivo',
+        icon: Icons.payments_outlined,
+        valueCents: controller.mixedCashCents,
+        revision: controller.paymentInputRevision,
+        enabled: !controller.isSubmitting,
+        onChanged: (value) =>
+            controller.setMixedPaymentCents(PaymentMethod.cash, value),
+        onFillRemaining: () =>
+            controller.fillMixedRemaining(PaymentMethod.cash),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      _PaymentAmountField(
+        fieldKey: 'pos-mixed-card',
+        label: 'Tarjeta',
+        icon: Icons.credit_card_outlined,
+        valueCents: controller.mixedCardCents,
+        revision: controller.paymentInputRevision,
+        enabled: !controller.isSubmitting,
+        onChanged: (value) =>
+            controller.setMixedPaymentCents(PaymentMethod.card, value),
+        onFillRemaining: () =>
+            controller.fillMixedRemaining(PaymentMethod.card),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      _PaymentAmountField(
+        fieldKey: 'pos-mixed-transfer',
+        label: 'Transferencia',
+        icon: Icons.account_balance_outlined,
+        valueCents: controller.mixedTransferCents,
+        revision: controller.paymentInputRevision,
+        enabled: !controller.isSubmitting,
+        onChanged: (value) =>
+            controller.setMixedPaymentCents(PaymentMethod.transfer, value),
+        onFillRemaining: () =>
+            controller.fillMixedRemaining(PaymentMethod.transfer),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      _MoneyRow(label: 'Asignado', cents: controller.allocatedPaymentCents),
+      if (controller.paymentDifferenceCents >= 0)
+        _MoneyRow(label: 'Restante', cents: controller.paymentDifferenceCents)
+      else
+        _MoneyRow(label: 'Excede', cents: -controller.paymentDifferenceCents),
+      if (controller.mixedCashCents > 0) ...[
+        const SizedBox(height: AppSpacing.xs),
+        _CashTenderEditor(
+          controller: controller,
+          cashDueCents: controller.mixedCashCents,
+        ),
+      ],
+    ],
+  );
+}
+
+class _PaymentAmountField extends StatelessWidget {
+  const _PaymentAmountField({
+    required this.fieldKey,
+    required this.label,
+    required this.icon,
+    required this.valueCents,
+    required this.revision,
+    required this.enabled,
+    required this.onChanged,
+    required this.onFillRemaining,
+  });
+
+  final String fieldKey;
+  final String label;
+  final IconData icon;
+  final int valueCents;
+  final int revision;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+  final VoidCallback onFillRemaining;
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    key: ValueKey('$fieldKey-$revision'),
+    initialValue: valueCents == 0 ? '' : _centsInput(valueCents),
+    enabled: enabled,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    textInputAction: TextInputAction.next,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      prefixText: r'$ ',
+      suffixIcon: IconButton(
+        tooltip: 'Completar restante con $label',
+        onPressed: enabled ? onFillRemaining : null,
+        icon: const Icon(Icons.auto_fix_high_outlined),
+      ),
+    ),
+    onChanged: (value) {
+      try {
+        onChanged(parseMoneyToCents(value));
+      } on Object {
+        onChanged(0);
+      }
+    },
+  );
+}
+
+String _checkoutButtonLabel(PosController controller) {
+  final total = formatMoney(controller.totals.totalCents);
+  return switch (controller.paymentMode) {
+    PosPaymentMode.cash => 'Cobrar $total',
+    PosPaymentMode.card => 'Cobrar con tarjeta $total',
+    PosPaymentMode.transfer => 'Registrar transferencia $total',
+    PosPaymentMode.mixed => 'Cobrar pago mixto $total',
+  };
+}
+
+String _paymentModeLabel(PosPaymentMode mode) => switch (mode) {
+  PosPaymentMode.cash => 'Efectivo',
+  PosPaymentMode.card => 'Tarjeta',
+  PosPaymentMode.transfer => 'Transferencia',
+  PosPaymentMode.mixed => 'Mixto',
+};
+
+String _paymentMethodLabel(PaymentMethod method) => switch (method) {
+  PaymentMethod.cash => 'Efectivo',
+  PaymentMethod.card => 'Tarjeta',
+  PaymentMethod.transfer => 'Transferencia',
+};
+
+String _centsInput(int cents) {
+  final negative = cents < 0;
+  final absolute = cents.abs();
+  final whole = absolute ~/ 100;
+  final fraction = (absolute % 100).toString().padLeft(2, '0');
+  return '${negative ? '-' : ''}$whole.$fraction';
 }
 
 class _CartRow extends StatelessWidget {
@@ -712,15 +1114,22 @@ class _MoneyRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 2),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: emphasized ? Theme.of(context).textTheme.titleLarge : null,
+        Expanded(
+          child: Text(
+            label,
+            style: emphasized ? Theme.of(context).textTheme.titleLarge : null,
+          ),
         ),
-        Text(
-          formatMoney(cents),
-          style: emphasized ? Theme.of(context).textTheme.headlineSmall : null,
+        const SizedBox(width: AppSpacing.xs),
+        Flexible(
+          child: Text(
+            formatMoney(cents),
+            textAlign: TextAlign.end,
+            style: emphasized
+                ? Theme.of(context).textTheme.headlineSmall
+                : null,
+          ),
         ),
       ],
     ),
