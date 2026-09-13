@@ -2,25 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pos_app/app/navigation_model.dart';
+import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/features/auth/data/auth_repository.dart';
 import 'package:pos_app/core/authorization/authorization_providers.dart';
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/sync/presentation/sync_status_panel.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 
 class AppNavigationDrawer extends ConsumerWidget {
-  const AppNavigationDrawer({this.capabilities, this.currentRoute, super.key});
+  const AppNavigationDrawer({
+    this.capabilities,
+    this.currentRoute,
+    this.onLogout,
+    super.key,
+  });
 
   final EffectiveCapabilities? capabilities;
   final String? currentRoute;
+  final Future<void> Function()? onLogout;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final logout =
+        onLogout ??
+        () async {
+          await AuthRepository(appDatabase).logout();
+          ref.invalidate(effectiveCapabilitiesProvider);
+        };
     final supplied = capabilities;
     if (supplied != null) {
       return _NavigationDrawer(
         capabilities: supplied,
         currentRoute: currentRoute,
         showSyncStatus: false,
+        onLogout: logout,
       );
     }
     return ref
@@ -30,34 +45,46 @@ class AppNavigationDrawer extends ConsumerWidget {
             capabilities: effective,
             currentRoute: currentRoute,
             showSyncStatus: true,
+            onLogout: logout,
           ),
-          loading: () => const _NavigationDrawer(
+          loading: () => _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
             showSyncStatus: false,
+            onLogout: logout,
           ),
-          error: (_, _) => const _NavigationDrawer(
+          error: (_, _) => _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
             showSyncStatus: false,
+            onLogout: logout,
           ),
         );
   }
 }
 
-class _NavigationDrawer extends StatelessWidget {
+class _NavigationDrawer extends StatefulWidget {
   const _NavigationDrawer({
     required this.capabilities,
     required this.showSyncStatus,
+    required this.onLogout,
     this.currentRoute,
   });
 
   final EffectiveCapabilities capabilities;
   final String? currentRoute;
   final bool showSyncStatus;
+  final Future<void> Function() onLogout;
+
+  @override
+  State<_NavigationDrawer> createState() => _NavigationDrawerState();
+}
+
+class _NavigationDrawerState extends State<_NavigationDrawer> {
+  bool _loggingOut = false;
 
   @override
   Widget build(BuildContext context) {
-    final sections = visibleNavigationSections(capabilities);
-    final route = currentRoute ?? GoRouterState.of(context).uri.path;
+    final sections = visibleNavigationSections(widget.capabilities);
+    final route = widget.currentRoute ?? GoRouterState.of(context).uri.path;
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -77,18 +104,20 @@ class _NavigationDrawer extends StatelessWidget {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'POS Flutter',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      'Operación comercial',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'POS Flutter',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        'Operación comercial',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -121,7 +150,70 @@ class _NavigationDrawer extends StatelessWidget {
                 },
               ),
           ],
-          if (showSyncStatus) ...[const Divider(), const SyncStatusPanel()],
+          if (widget.showSyncStatus) ...[
+            const Divider(),
+            const SyncStatusPanel(),
+          ],
+          const Divider(),
+          ListTile(
+            key: const Key('logout-tile'),
+            leading: const Icon(Icons.logout),
+            title: const Text('Cerrar sesión'),
+            enabled: !_loggingOut,
+            onTap: _loggingOut
+                ? null
+                : () async {
+                    var confirming = false;
+                    final confirmed =
+                        await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => StatefulBuilder(
+                            builder: (dialogContext, setDialogState) =>
+                                AlertDialog(
+                                  title: const Text('Cerrar sesión'),
+                                  content: const Text(
+                                    '¿Deseas cerrar la sesión actual en este dispositivo?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: confirming
+                                          ? null
+                                          : () => Navigator.pop(
+                                              dialogContext,
+                                              false,
+                                            ),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: confirming
+                                          ? null
+                                          : () {
+                                              if (confirming) return;
+                                              confirming = true;
+                                              setDialogState(() {});
+                                              Navigator.pop(
+                                                dialogContext,
+                                                true,
+                                              );
+                                            },
+                                      child: const Text('Cerrar sesión'),
+                                    ),
+                                  ],
+                                ),
+                          ),
+                        ) ??
+                        false;
+
+                    if (!confirmed || !context.mounted) return;
+
+                    setState(() => _loggingOut = true);
+                    await widget.onLogout();
+
+                    if (!context.mounted) return;
+
+                    context.go('/login');
+                  },
+          ),
         ],
       ),
     );
