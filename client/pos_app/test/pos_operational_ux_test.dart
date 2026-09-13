@@ -24,6 +24,17 @@ void main() {
   });
 
   test(
+    'barcode search resolves the same product and keeps its internal id',
+    () async {
+      final controller = await _controller();
+      controller.setSearch('750000000001');
+      expect(controller.visibleProducts.single.name, 'Café americano');
+      expect(controller.visibleProducts.single.id, 1);
+      expect(controller.visibleProducts.single.globalId, 'coffee');
+    },
+  );
+
+  test(
     'tap product adds one and repeated tap increments existing line',
     () async {
       final controller = await _controller();
@@ -233,6 +244,8 @@ Future<PosController> _controller({
         priceCents: 4500,
         stock: 3,
         categoryId: 1,
+        categoryName: 'Bebidas calientes',
+        barcode: '750000000001',
       ),
       PosProduct(
         id: 2,
@@ -242,6 +255,8 @@ Future<PosController> _controller({
         priceCents: 900,
         stock: 8,
         categoryId: 2,
+        categoryName: 'Bebidas frías',
+        barcode: '750000000002',
       ),
       PosProduct(
         id: 3,

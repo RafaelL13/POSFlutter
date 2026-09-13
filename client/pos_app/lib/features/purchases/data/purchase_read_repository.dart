@@ -10,17 +10,22 @@ final class PurchaseReadRepository {
     final authorization = await AuthorizationService(_db)
         .require(Capability.purchaseRead);
     final context = authorization.context!;
-    final columns = <String>['id', 'global_id', 'purchase_date', 'status'];
+    final columns = <String>[
+      'p.id',
+      'p.global_id',
+      'p.purchase_date',
+      'p.status',
+      's.name AS supplier_name',
+    ];
     if (authorization.can(Capability.viewPurchaseCost)) {
-      columns.add('total_cents');
+      columns.add('p.total_cents');
     }
     final database = await _db.open();
-    return database.query(
-      'purchases',
-      columns: columns,
-      where: 'branch_id = ?',
-      whereArgs: [context.branchId],
-      orderBy: 'id DESC',
+    return database.rawQuery(
+      '''SELECT ${columns.join(', ')} FROM purchases p
+         INNER JOIN suppliers s ON s.id = p.supplier_id
+         WHERE p.branch_id = ? ORDER BY p.id DESC''',
+      [context.branchId],
     );
   }
 

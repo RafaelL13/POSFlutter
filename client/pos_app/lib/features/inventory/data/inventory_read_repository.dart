@@ -11,12 +11,18 @@ final class InventoryReadRepository {
         .require(Capability.inventoryAvailabilityRead);
     final context = authorization.context!;
     final database = await _db.open();
+    final costProjection = authorization.can(Capability.viewInventoryValue)
+        ? ', COALESCE(SUM(l.available_quantity * l.unit_cost_cents), 0) AS value_cents'
+        : '';
     return database.rawQuery(
-      '''SELECT p.id, p.name, COALESCE(SUM(l.available_quantity), 0) AS stock
+      '''SELECT p.id, p.name, p.code, p.minimum_stock, COALESCE(SUM(l.available_quantity), 0) AS stock
+         $costProjection,
+         (SELECT MAX(m.movement_date) FROM inventory_movements m
+          WHERE m.product_id=p.id AND m.branch_id=?) AS last_movement
          FROM products p LEFT JOIN inventory_lots l
            ON l.product_id = p.id AND l.branch_id = ? AND l.active = 1
-         WHERE p.business_id = ? GROUP BY p.id, p.name ORDER BY p.name''',
-      [context.branchId, context.businessId],
+         WHERE p.business_id = ? GROUP BY p.id, p.name, p.code, p.minimum_stock ORDER BY p.name''',
+      [context.branchId, context.branchId, context.businessId],
     );
   }
 

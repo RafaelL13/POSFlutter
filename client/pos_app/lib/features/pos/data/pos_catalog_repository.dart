@@ -10,6 +10,8 @@ final class PosProduct {
     required this.priceCents,
     required this.stock,
     this.categoryId,
+    this.categoryName,
+    this.barcode,
   });
   final int id;
   final String globalId;
@@ -18,6 +20,8 @@ final class PosProduct {
   final int priceCents;
   final int stock;
   final int? categoryId;
+  final String? categoryName;
+  final String? barcode;
 }
 
 final class PosCategory {
@@ -62,13 +66,15 @@ final class PosCatalogRepository {
     );
     final rows = await db.rawQuery(
       '''
-      SELECT p.id,p.global_id,p.code,p.name,p.sale_price_cents,p.category_id,
+      SELECT p.id,p.global_id,p.code,p.name,p.barcode,p.sale_price_cents,p.category_id,
+             c.name category_name,
              COALESCE(SUM(CASE WHEN l.active=1 THEN l.available_quantity ELSE 0 END),0) stock
       FROM products p
+      LEFT JOIN categories c ON c.id=p.category_id
       LEFT JOIN inventory_lots l ON l.product_id=p.id AND l.branch_id=?
       WHERE p.active=1 AND p.business_id=?
-      GROUP BY p.id,p.global_id,p.code,p.name,p.sale_price_cents,p.category_id
-      ORDER BY p.name LIMIT 500
+      GROUP BY p.id,p.global_id,p.code,p.name,p.barcode,p.sale_price_cents,p.category_id,c.name
+      ORDER BY p.name,p.code LIMIT 500
     ''',
       [context.branchId, context.businessId],
     );
@@ -94,6 +100,8 @@ final class PosCatalogRepository {
             priceCents: row['sale_price_cents'] as int,
             stock: row['stock'] as int,
             categoryId: row['category_id'] as int?,
+            categoryName: row['category_name'] as String?,
+            barcode: row['barcode'] as String?,
           ),
       ],
       categories: [

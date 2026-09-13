@@ -6,12 +6,14 @@ import 'package:pos_app/features/auth/presentation/login_screen.dart';
 import 'package:pos_app/features/cash/presentation/cash_screen.dart';
 import 'package:pos_app/features/backup/presentation/backup_screen.dart';
 import 'package:pos_app/features/expenses/presentation/expenses_screen.dart';
+import 'package:pos_app/features/first_run/presentation/first_run_screen.dart';
 import 'package:pos_app/features/inventory/presentation/inventory_screen.dart';
 import 'package:pos_app/features/products/presentation/products_screen.dart';
 import 'package:pos_app/features/purchases/presentation/purchases_screen.dart';
 import 'package:pos_app/features/reports/presentation/reports_screen.dart';
 import 'package:pos_app/features/sales/presentation/sales_screen.dart';
 import 'package:pos_app/features/users/presentation/users_screen.dart';
+import 'package:pos_app/features/users/data/user_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -19,6 +21,10 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   final screens = <String, ({Widget screen, String visibleLabel})>{
+    'Primer inicio': (
+      screen: const FirstRunScreen(),
+      visibleLabel: 'Primeros pasos',
+    ),
     'Login': (screen: const LoginScreen(), visibleLabel: 'Bienvenido'),
     'Productos': (screen: const ProductsScreen(), visibleLabel: 'Productos'),
     'Compras': (screen: const PurchasesScreen(), visibleLabel: 'Compras'),
@@ -27,11 +33,19 @@ void main() {
     'Caja': (screen: const CashScreen(), visibleLabel: 'Caja'),
     'Gastos': (screen: const ExpensesScreen(), visibleLabel: 'Gastos'),
     'Reportes': (screen: const ReportsScreen(), visibleLabel: 'Reportes'),
-    'Usuarios': (screen: const UsersScreen(), visibleLabel: 'Usuarios'),
+    'Usuarios': (
+      screen: UsersScreen(loader: () async => (<UserSummary>[], false)),
+      visibleLabel: 'Usuarios',
+    ),
     'Respaldos': (screen: const BackupScreen(), visibleLabel: 'Respaldos'),
   };
 
-  const viewports = <Size>[Size(390, 844), Size(800, 1280), Size(1280, 800)];
+  const viewports = <Size>[
+    Size(390, 844),
+    Size(800, 1280),
+    Size(1280, 800),
+    Size(1920, 1080),
+  ];
 
   for (final entry in screens.entries) {
     for (final viewport in viewports) {
@@ -48,13 +62,11 @@ void main() {
               ProviderScope(
                 child: MaterialApp(
                   theme: AppTheme.light,
-                  builder:
-                      (context, child) => MediaQuery(
-                        data: MediaQuery.of(
-                          context,
-                        ).copyWith(textScaler: TextScaler.linear(textScale)),
-                        child: child!,
-                      ),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(textScaler: TextScaler.linear(textScale)),
+                    child: child!,
+                  ),
                   home: entry.value.screen,
                 ),
               ),

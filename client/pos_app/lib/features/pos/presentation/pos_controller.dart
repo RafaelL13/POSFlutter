@@ -42,7 +42,8 @@ final class PosController extends ChangeNotifier {
           final queryMatches =
               query.isEmpty ||
               product.name.toLowerCase().contains(query) ||
-              product.code.toLowerCase().contains(query);
+              product.code.toLowerCase().contains(query) ||
+              (product.barcode?.toLowerCase().contains(query) ?? false);
           return categoryMatches && queryMatches;
         })
         .toList(growable: false);

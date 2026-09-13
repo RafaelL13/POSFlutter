@@ -305,7 +305,7 @@ class _CatalogPanel extends StatelessWidget {
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
               labelText: 'Buscar productos',
-              hintText: 'Nombre o código',
+              hintText: 'Nombre, código/SKU o código de barras',
               suffixIcon: search.text.isEmpty
                   ? null
                   : IconButton(
@@ -410,7 +410,7 @@ class _ProductCard extends StatelessWidget {
                 ),
               ),
               Text(
-                product.code,
+                '${product.code} · ${product.categoryName ?? 'Sin categoría'}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall,
