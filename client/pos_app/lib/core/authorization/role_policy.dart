@@ -2,7 +2,7 @@ import 'app_role.dart';
 import 'capability.dart';
 import 'device_mode.dart';
 
-const authorizationPolicyVersion = 1;
+const authorizationPolicyVersion = 2;
 
 enum PermissionLevel { none, ownOnly, read, full, requiresAuthorization }
 
@@ -102,6 +102,7 @@ abstract final class RolePolicy {
       Capability.saleCreate ||
       Capability.cashOpen ||
       Capability.cashClose ||
+      Capability.cashDeposit ||
       Capability.purchaseCreate ||
       Capability.expenseCreate => PermissionLevel.full,
 

@@ -365,6 +365,6 @@ void main() {
   });
 
   test('authorization policy version is defined', () {
-    expect(authorizationPolicyVersion, 1);
+    expect(authorizationPolicyVersion, 2);
   });
 }

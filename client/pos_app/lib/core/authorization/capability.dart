@@ -10,6 +10,7 @@ enum Capability {
   cashRead,
   cashClose,
   cashCloseWithDifference,
+  cashDeposit,
   cashWithdrawal,
 
   purchaseRead,
@@ -75,6 +76,7 @@ extension CapabilityPolicyMetadata on Capability {
       Capability.cashOpen ||
       Capability.cashClose ||
       Capability.cashCloseWithDifference ||
+      Capability.cashDeposit ||
       Capability.cashWithdrawal ||
       Capability.purchaseCreate ||
       Capability.expenseCreate ||
