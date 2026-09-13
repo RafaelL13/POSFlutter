@@ -54,6 +54,18 @@ public sealed record InventoryLotAllocationPayload(Guid LotGlobalId,int Quantity
 public sealed record InventoryAdjustmentSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,Guid ProductGlobalId,DateTimeOffset Date,string Type,int QuantityDelta,string Reason,Guid? NewLotGlobalId,long? UnitCostCents,IReadOnlyList<InventoryLotAllocationPayload> Allocations);
 public sealed record ExpenseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset Date,string Concept,string? Category,long AmountCents,string PaymentMethod,string? Notes);
 public sealed record CashSessionSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset OpenedAt,long OpeningBalanceCents,string Status,DateTimeOffset? ClosedAt,long? CountedCashCents,long? ExpectedCashCents,long? DifferenceCents);
+public sealed record CashMovementSyncPayload(
+    Guid GlobalId,
+    Guid BusinessGlobalId,
+    Guid BranchGlobalId,
+    Guid DeviceGlobalId,
+    Guid UserGlobalId,
+    Guid CashSessionGlobalId,
+    DateTimeOffset Date,
+    string Type,
+    long AmountCents,
+    string? Notes,
+    JsonElement? Authorization = null);
 public sealed record SaleLotSyncPayload(Guid GlobalId,Guid LotGlobalId,int Quantity,long UnitCostCents,long TotalCostCents);
 public sealed record SaleLineSyncPayload(Guid DetailGlobalId,Guid ProductGlobalId,int Quantity,long UnitPriceCents,long TotalCents,long FifoCostCents,IReadOnlyList<SaleLotSyncPayload> Lots);
 public sealed record SalePaymentSyncPayload(Guid GlobalId,string Method,long AmountCents);

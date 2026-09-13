@@ -8,6 +8,9 @@ namespace Pos.Infrastructure;
 public sealed class SyncService(PosDbContext db) : ISyncService
 {
     private const string PointOfSaleMode = "PointOfSale";
+
+    private sealed class CashMovementAuthorizationException(string message)
+        : Exception(message);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly PosDbContext _db = db;
 
@@ -103,6 +106,16 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     "Rejected",
                     SafeSyncError(ex),
                     ErrorCode: SyncErrorCodes.UnsupportedOperation));
+            }
+            catch (CashMovementAuthorizationException ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                _db.ChangeTracker.Clear();
+                results.Add(new SyncOperationResult(
+                    operation.GlobalId,
+                    "Rejected",
+                    SafeSyncError(ex),
+                    ErrorCode: SyncErrorCodes.RoleDenied));
             }
             catch (InvalidOperationException ex)
             {
@@ -235,6 +248,9 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             case ("CashSession", "Create"):
             case ("CashSession", "Update"):
                 await ApplyCashSessionAsync(operation, tenant, cancellationToken);
+                break;
+            case ("CashMovement", "Create"):
+                await ApplyCashMovementAsync(operation, tenant, cancellationToken);
                 break;
             case ("Sale", "Create"):
                 await ApplySaleAsync(operation, tenant, cancellationToken);
@@ -860,6 +876,158 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         entity.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    private async Task ApplyCashMovementAsync(
+        SyncOperationDto operation,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
+    {
+        var payload = Deserialize<CashMovementSyncPayload>(operation);
+        ValidateEnvelope(operation, payload.GlobalId);
+        ValidateTransactionalContext(
+            payload.BusinessGlobalId,
+            payload.BranchGlobalId,
+            payload.DeviceGlobalId,
+            tenant);
+
+        if (payload.Type is not ("ManualIn" or "ManualOut"))
+            throw new ArgumentException("Cash movement type is invalid.");
+        if ((payload.Type == "ManualIn" && payload.AmountCents <= 0) ||
+            (payload.Type == "ManualOut" && payload.AmountCents >= 0))
+            throw new ArgumentException("Cash movement amount does not match its type.");
+
+        var notes = payload.Notes?.Trim();
+        if (string.IsNullOrWhiteSpace(notes) || notes.Length > 240)
+            throw new ArgumentException("Cash movement reason is required and must not exceed 240 characters.");
+
+        var userId = await RequiredTenantUserIdAsync(
+            payload.UserGlobalId,
+            tenant,
+            cancellationToken);
+
+        var session = await _db.CashSessions.AsNoTracking().SingleOrDefaultAsync(
+            x => x.BusinessId == tenant.BusinessId &&
+                 x.GlobalId == payload.CashSessionGlobalId,
+            cancellationToken);
+        if (session is null)
+            throw new InvalidOperationException(
+                $"Cash session {payload.CashSessionGlobalId} has not been synchronized yet.");
+        if (session.BranchId != tenant.BranchId || session.DeviceId != tenant.DeviceId)
+            throw new ArgumentException(
+                "Cash movement session does not belong to the authenticated device.");
+        if (payload.Date < session.OpenedAt ||
+            (session.ClosedAt is { } closedAt && payload.Date > closedAt))
+            throw new ArgumentException(
+                "Cash movement date is outside the cash session interval.");
+
+        await ValidateCashMovementAuthorizationAsync(payload, tenant, cancellationToken);
+
+        var existing = await _db.CashMovements.SingleOrDefaultAsync(
+            x => x.BusinessId == tenant.BusinessId && x.GlobalId == payload.GlobalId,
+            cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.CashSessionId == session.Id &&
+                existing.UserId == userId &&
+                existing.MovementDate == payload.Date &&
+                existing.Type == payload.Type &&
+                existing.AmountCents == payload.AmountCents &&
+                existing.Notes == notes)
+                return;
+
+            throw new ArgumentException(
+                "Cash movement GlobalId already exists with different data.");
+        }
+
+        _db.CashMovements.Add(new CashMovement
+        {
+            GlobalId = payload.GlobalId,
+            BusinessId = tenant.BusinessId,
+            CashSessionId = session.Id,
+            UserId = userId,
+            MovementDate = payload.Date,
+            Type = payload.Type,
+            AmountCents = payload.AmountCents,
+            Notes = notes
+        });
+    }
+
+    private async Task ValidateCashMovementAuthorizationAsync(
+        CashMovementSyncPayload payload,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
+    {
+        if (tenant.Role != "Supervisor" || payload.Type != "ManualOut")
+            return;
+
+        if (payload.Authorization is not { } authorization ||
+            authorization.ValueKind != JsonValueKind.Object)
+            throw new CashMovementAuthorizationException(
+                "Supervisor cash withdrawal requires second-user authorization.");
+
+        var capability = RequiredAuthorizationString(authorization, "capability");
+        var requirement = RequiredAuthorizationString(authorization, "requirement");
+        var performedBy = RequiredAuthorizationGuid(authorization, "performedByUserGlobalId");
+        var authorizedBy = RequiredAuthorizationGuid(authorization, "authorizedByUserGlobalId");
+        var businessGlobalId = RequiredAuthorizationGuid(authorization, "businessGlobalId");
+        var deviceGlobalId = RequiredAuthorizationGuid(authorization, "deviceGlobalId");
+        var entityType = RequiredAuthorizationString(authorization, "entityType");
+        var entityGlobalId = RequiredAuthorizationGuid(authorization, "entityGlobalId");
+        var authOperation = RequiredAuthorizationString(authorization, "operation");
+        var reason = RequiredAuthorizationString(authorization, "reason");
+        _ = RequiredAuthorizationGuid(authorization, "authorizationGlobalId");
+        _ = RequiredAuthorizationDate(authorization, "authorizedAt");
+        _ = RequiredAuthorizationDate(authorization, "consumedAt");
+
+        if (capability != "cashWithdrawal" ||
+            requirement != "SecondUserAuthorization" ||
+            performedBy != tenant.UserGlobalId ||
+            authorizedBy == tenant.UserGlobalId ||
+            businessGlobalId != tenant.BusinessGlobalId ||
+            deviceGlobalId != tenant.DeviceGlobalId ||
+            entityType != "CashMovement" ||
+            entityGlobalId != payload.GlobalId ||
+            authOperation != "ManualWithdrawal" ||
+            string.IsNullOrWhiteSpace(reason))
+            throw new CashMovementAuthorizationException(
+                "Cash withdrawal authorization metadata does not match the operation.");
+
+        var authorizerRole = await _db.Users.AsNoTracking()
+            .Where(x => x.BusinessId == tenant.BusinessId && x.GlobalId == authorizedBy && x.Active)
+            .Select(x => x.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (authorizerRole is not ("Manager" or "Administrator"))
+            throw new CashMovementAuthorizationException(
+                "Cash withdrawal authorizer is not allowed.");
+    }
+
+    private static string RequiredAuthorizationString(JsonElement authorization, string property)
+    {
+        if (!authorization.TryGetProperty(property, out var value) ||
+            value.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(value.GetString()))
+            throw new CashMovementAuthorizationException(
+                "Cash movement authorization metadata is incomplete.");
+        return value.GetString()!;
+    }
+
+    private static Guid RequiredAuthorizationGuid(JsonElement authorization, string property)
+    {
+        var value = RequiredAuthorizationString(authorization, property);
+        if (!Guid.TryParse(value, out var parsed) || parsed == Guid.Empty)
+            throw new CashMovementAuthorizationException(
+                "Cash movement authorization metadata contains an invalid identifier.");
+        return parsed;
+    }
+
+    private static DateTimeOffset RequiredAuthorizationDate(JsonElement authorization, string property)
+    {
+        var value = RequiredAuthorizationString(authorization, property);
+        if (!DateTimeOffset.TryParse(value, out var parsed))
+            throw new CashMovementAuthorizationException(
+                "Cash movement authorization metadata contains an invalid date.");
+        return parsed;
+    }
+
     private async Task ApplySaleAsync(
         SyncOperationDto operation,
         SyncTenantContext tenant,
@@ -1128,7 +1296,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         var allowed = tenant.Role switch
         {
             "Manager" => operation.EntityType is not ("Business" or "Branch" or "Device" or "User"),
-            "Supervisor" => operation.EntityType is "Sale" or "CashSession" or "Purchase" or "Expense",
+            "Supervisor" => operation.EntityType is "Sale" or "CashSession" or "CashMovement" or "Purchase" or "Expense",
             "Seller" => operation.EntityType is "Sale" or "CashSession",
             _ => false
         };

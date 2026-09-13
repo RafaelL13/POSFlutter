@@ -308,13 +308,15 @@ final class RemoteReportRepository {
             'openingBalanceCents',
             'cashSalesCents',
             'cashExpensesCents',
+            'manualInCents',
+            'manualOutCents',
             'calculatedExpectedCashCents',
             'recordedExpectedCashCents',
             'countedCashCents',
             'differenceCents',
           ],
           rows: rowsFrom(json['items']),
-          note: 'La nube actual no sincroniza movimientos manuales de caja; el esperado calculado usa saldo inicial + ventas en efectivo - gastos en efectivo.',
+          note: 'Esperado calculado = saldo inicial + ventas en efectivo - gastos en efectivo + entradas manuales - retiros manuales.',
         );
       case RemoteReportKind.paymentMethods:
         return RemoteReportTable(

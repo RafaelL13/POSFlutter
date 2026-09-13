@@ -8,7 +8,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<Business> Businesses => Set<Business>(); public DbSet<Branch> Branches => Set<Branch>(); public DbSet<Device> Devices => Set<Device>(); public DbSet<UserAccount> Users => Set<UserAccount>();
     public DbSet<Category> Categories => Set<Category>(); public DbSet<Supplier> Suppliers => Set<Supplier>(); public DbSet<Product> Products => Set<Product>(); public DbSet<Purchase> Purchases => Set<Purchase>(); public DbSet<PurchaseLine> PurchaseLines => Set<PurchaseLine>();
     public DbSet<InventoryLot> InventoryLots => Set<InventoryLot>(); public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>(); public DbSet<Sale> Sales => Set<Sale>(); public DbSet<SaleLine> SaleLines => Set<SaleLine>(); public DbSet<SaleLotAllocation> SaleLotAllocations => Set<SaleLotAllocation>(); public DbSet<SalePayment> SalePayments => Set<SalePayment>();
-    public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
+    public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<CashMovement> CashMovements => Set<CashMovement>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -28,6 +28,19 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         b.Entity<SaleLotAllocation>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.ToTable(t=>t.HasCheckConstraint("CK_SaleLot_Qty", "[Quantity] > 0")); });
         b.Entity<SalePayment>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.HasIndex(x=>new{x.SaleId,x.Method}).IsUnique(); e.Property(x=>x.Method).HasMaxLength(16); e.ToTable(t=>{ t.HasCheckConstraint("CK_SalePayment_Amount", "[AmountCents] > 0"); t.HasCheckConstraint("CK_SalePayment_Method", "[Method] IN ('Cash','Card','Transfer')"); }); });
         b.Entity<CashSession>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); });
+        b.Entity<CashMovement>(e => {
+            e.HasKey(x=>x.Id);
+            e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique();
+            e.HasIndex(x=>new{x.BusinessId,x.CashSessionId,x.MovementDate});
+            e.Property(x=>x.Type).HasMaxLength(16);
+            e.Property(x=>x.Notes).HasMaxLength(240);
+            e.HasOne<CashSession>().WithMany().HasForeignKey(x=>x.CashSessionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<UserAccount>().WithMany().HasForeignKey(x=>x.UserId).OnDelete(DeleteBehavior.Restrict);
+            e.ToTable(t=>{
+                t.HasCheckConstraint("CK_CashMovement_Type", "[Type] IN ('ManualIn','ManualOut')");
+                t.HasCheckConstraint("CK_CashMovement_Amount", "([Type] = 'ManualIn' AND [AmountCents] > 0) OR ([Type] = 'ManualOut' AND [AmountCents] < 0)");
+            });
+        });
         b.Entity<Expense>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); e.ToTable(t=>t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
         b.Entity<InboundOperation>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.OperationGlobalId}).IsUnique(); });
         b.Entity<SyncChange>(e => { e.HasKey(x=>x.Id); e.Property(x=>x.Id).ValueGeneratedOnAdd(); e.HasIndex(x=>new{x.BusinessId,x.Id}); });

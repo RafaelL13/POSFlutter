@@ -119,6 +119,8 @@ public sealed record CashReportRow(
     long OpeningBalanceCents,
     long CashSalesCents,
     long CashExpensesCents,
+    long ManualInCents,
+    long ManualOutCents,
     long CalculatedExpectedCashCents,
     long? RecordedExpectedCashCents,
     long? CountedCashCents,

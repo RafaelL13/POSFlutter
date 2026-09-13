@@ -410,9 +410,12 @@ public sealed class RemoteReportService(PosDbContext db)
                 c.OpenedAt,c.ClosedAt,c.Status,c.OpeningBalanceCents,
                 _db.SalePayments.Where(p => _db.Sales.Any(s => s.Id == p.SaleId && s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)) && p.Method == "Cash").Sum(p => (long?)p.AmountCents) ?? 0,
                 _db.Expenses.Where(e => e.BusinessId == tenant.BusinessId && e.BranchId == c.BranchId && e.DeviceId == c.DeviceId && e.PaymentMethod == "Cash" && e.ExpenseDate >= c.OpenedAt && e.ExpenseDate < (c.ClosedAt ?? period.ToExclusive)).Sum(e => (long?)e.AmountCents) ?? 0,
+                _db.CashMovements.Where(m => m.BusinessId == tenant.BusinessId && m.CashSessionId == c.Id && m.Type == "ManualIn").Sum(m => (long?)m.AmountCents) ?? 0,
+                -(_db.CashMovements.Where(m => m.BusinessId == tenant.BusinessId && m.CashSessionId == c.Id && m.Type == "ManualOut").Sum(m => (long?)m.AmountCents) ?? 0),
                 c.OpeningBalanceCents
                     + (_db.SalePayments.Where(p => _db.Sales.Any(s => s.Id == p.SaleId && s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)) && p.Method == "Cash").Sum(p => (long?)p.AmountCents) ?? 0)
-                    - (_db.Expenses.Where(e => e.BusinessId == tenant.BusinessId && e.BranchId == c.BranchId && e.DeviceId == c.DeviceId && e.PaymentMethod == "Cash" && e.ExpenseDate >= c.OpenedAt && e.ExpenseDate < (c.ClosedAt ?? period.ToExclusive)).Sum(e => (long?)e.AmountCents) ?? 0),
+                    - (_db.Expenses.Where(e => e.BusinessId == tenant.BusinessId && e.BranchId == c.BranchId && e.DeviceId == c.DeviceId && e.PaymentMethod == "Cash" && e.ExpenseDate >= c.OpenedAt && e.ExpenseDate < (c.ClosedAt ?? period.ToExclusive)).Sum(e => (long?)e.AmountCents) ?? 0)
+                    + (_db.CashMovements.Where(m => m.BusinessId == tenant.BusinessId && m.CashSessionId == c.Id).Sum(m => (long?)m.AmountCents) ?? 0),
                 c.ExpectedCashCents,c.CountedCashCents,c.DifferenceCents)).ToListAsync(ct);
         return new ReportPage<CashReportRow>(page,pageSize,total,items);
     }

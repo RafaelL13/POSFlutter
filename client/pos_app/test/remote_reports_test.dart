@@ -204,4 +204,43 @@ void main() {
     expect(api.postCalls, 0);
     expect(api.lastPath, '/api/admin/reports/payment-methods');
   });
+
+  test(
+    'cash report central includes manual cash reconciliation columns',
+    () async {
+      final api = _FakeApi({
+        'items': [
+          {
+            'userName': 'Manager',
+            'openedAt': '2026-09-13T08:00:00Z',
+            'closedAt': null,
+            'status': 'Open',
+            'openingBalanceCents': 1000,
+            'cashSalesCents': 0,
+            'cashExpensesCents': 0,
+            'manualInCents': 500,
+            'manualOutCents': 200,
+            'calculatedExpectedCashCents': 1300,
+            'recordedExpectedCashCents': null,
+            'countedCashCents': null,
+            'differenceCents': null,
+          },
+        ],
+        'page': 1,
+        'pageSize': 100,
+        'totalCount': 1,
+      });
+      final filter = RemoteReportFilter.forPreset(
+        ReportPreset.today,
+        now: DateTime(2026, 9, 13, 10),
+      );
+      final table = await RemoteReportRepository(api)
+          .table(RemoteReportKind.cash, filter);
+      expect(table.columns, containsAll(['manualInCents', 'manualOutCents']));
+      expect(table.rows.single['manualInCents'], 500);
+      expect(table.rows.single['manualOutCents'], 200);
+      expect(table.note, contains('entradas manuales'));
+      expect(table.note, contains('retiros manuales'));
+    },
+  );
 }
