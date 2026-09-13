@@ -26,16 +26,239 @@ final class CatalogRepository {
   Future<String> addProduct({
     required String code,
     required String name,
+    required int categoryId,
     required int salePriceCents,
     int minimumStock = 0,
-  }) async => _create(Capability.productWrite, 'Product', 'products', {
-    'code': code.trim(),
-    'name': name.trim(),
-    'presentation': 'Piece',
-    'sale_price_cents': salePriceCents,
-    'minimum_stock': minimumStock,
-    'active': 1,
-  });
+    String? barcode,
+  }) async {
+    if (code.trim().isEmpty) {
+      throw ArgumentError('El código es obligatorio.');
+    }
+
+    if (name.trim().isEmpty) {
+      throw ArgumentError('El nombre es obligatorio.');
+    }
+
+    if (salePriceCents < 0) {
+      throw ArgumentError('Precio inválido.');
+    }
+
+    if (minimumStock < 0) {
+      throw ArgumentError('Stock mínimo inválido.');
+    }
+
+    final authorization = await AuthorizationService(_db)
+        .require(Capability.productWrite);
+
+    final ctx = authorization.context!;
+    final db = await _db.open();
+
+    final categories = await db.query(
+      'categories',
+      columns: ['id', 'global_id'],
+      where: 'id = ? AND business_id = ? AND active = 1',
+      whereArgs: [categoryId, ctx.businessId],
+      limit: 1,
+    );
+
+    if (categories.isEmpty) {
+      throw StateError('La categoría seleccionada no existe o está inactiva.');
+    }
+
+    final categoryGlobalId = categories.first['global_id']! as String;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final productGlobalId = _ids.newId();
+
+    await _db.criticalTransaction((tx) async {
+      await tx.insert('products', {
+        'global_id': productGlobalId,
+        'business_id': ctx.businessId,
+        'code': code.trim(),
+        'barcode': barcode?.trim().isEmpty ?? true ? null : barcode!.trim(),
+        'name': name.trim(),
+        'category_id': categoryId,
+        'presentation': 'Piece',
+        'sale_price_cents': salePriceCents,
+        'minimum_stock': minimumStock,
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+
+      await tx.insert('sync_queue', {
+        'global_id': _ids.newId(),
+        'entity_type': 'Product',
+        'entity_global_id': productGlobalId,
+        'operation': 'Create',
+        'payload_version': 1,
+        'payload_json': jsonEncode({
+          'globalId': productGlobalId,
+          'businessGlobalId': ctx.businessGlobalId,
+          'categoryGlobalId': categoryGlobalId,
+          'code': code.trim(),
+          'barcode': barcode?.trim().isEmpty ?? true ? null : barcode!.trim(),
+          'name': name.trim(),
+          'presentation': 'Piece',
+          'salePriceCents': salePriceCents,
+          'minimumStock': minimumStock,
+          'active': true,
+          'serverVersion': 0,
+          'updatedAt': now,
+        }),
+        'created_at': now,
+      });
+    });
+
+    return productGlobalId;
+  }
+
+  Future<void> updateProduct({
+    required int productId,
+    required String code,
+    required String name,
+    required int categoryId,
+    required int salePriceCents,
+    required int minimumStock,
+    required bool active,
+    String? barcode,
+    SpecialAuthorizationGrant? priceAuthorizationGrant,
+  }) async {
+    final normalizedCode = code.trim();
+    final normalizedName = name.trim();
+    final normalizedBarcode = barcode?.trim();
+
+    if (normalizedCode.isEmpty) {
+      throw ArgumentError('El código es obligatorio.');
+    }
+
+    if (normalizedName.isEmpty) {
+      throw ArgumentError('El nombre es obligatorio.');
+    }
+
+    if (salePriceCents < 0) {
+      throw ArgumentError('Precio inválido.');
+    }
+
+    if (minimumStock < 0) {
+      throw ArgumentError('Stock mínimo inválido.');
+    }
+
+    final authorization = await AuthorizationService(_db)
+        .require(Capability.productWrite);
+
+    final ctx = authorization.context!;
+    final db = await _db.open();
+
+    final products = await db.query(
+      'products',
+      columns: ['global_id', 'sale_price_cents', 'presentation'],
+      where: 'id = ? AND business_id = ?',
+      whereArgs: [productId, ctx.businessId],
+      limit: 1,
+    );
+
+    if (products.isEmpty) {
+      throw StateError('Producto inexistente.');
+    }
+
+    final categories = await db.query(
+      'categories',
+      columns: ['global_id'],
+      where: 'id = ? AND business_id = ? AND active = 1',
+      whereArgs: [categoryId, ctx.businessId],
+      limit: 1,
+    );
+
+    if (categories.isEmpty) {
+      throw StateError('La categoría seleccionada no existe o está inactiva.');
+    }
+
+    final product = products.first;
+    final productGlobalId = product['global_id']! as String;
+    final categoryGlobalId = categories.first['global_id']! as String;
+    final presentation = (product['presentation'] as String?) ?? 'Piece';
+
+    final oldPrice = product['sale_price_cents']! as int;
+    final priceChanged = oldPrice != salePriceCents;
+
+    final specialAuthorization = SpecialAuthorizationService(_db);
+
+    PreparedSpecialAuthorization? preparedPriceAuthorization;
+
+    if (priceChanged) {
+      preparedPriceAuthorization = await specialAuthorization.prepare(
+        effective: authorization,
+        capability: Capability.productPriceChange,
+        grant: priceAuthorizationGrant,
+      );
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    await _db.criticalTransaction((tx) async {
+      Map<String, Object?>? authorizationMetadata;
+
+      if (preparedPriceAuthorization != null) {
+        authorizationMetadata = await specialAuthorization.consumeInTransaction(
+          tx,
+          prepared: preparedPriceAuthorization,
+          effective: authorization,
+          capability: Capability.productPriceChange,
+          operation: 'UpdateProductPrice',
+          entityType: 'Product',
+          entityGlobalId: productGlobalId,
+        );
+      }
+
+      final updated = await tx.update(
+        'products',
+        {
+          'code': normalizedCode,
+          'name': normalizedName,
+          'barcode': normalizedBarcode == null || normalizedBarcode.isEmpty
+              ? null
+              : normalizedBarcode,
+          'category_id': categoryId,
+          'sale_price_cents': salePriceCents,
+          'minimum_stock': minimumStock,
+          'active': active ? 1 : 0,
+          'updated_at': now,
+        },
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [productId, ctx.businessId],
+      );
+
+      if (updated != 1) {
+        throw StateError('Producto inexistente.');
+      }
+
+      await tx.insert('sync_queue', {
+        'global_id': _ids.newId(),
+        'entity_type': 'Product',
+        'entity_global_id': productGlobalId,
+        'operation': 'Update',
+        'payload_version': 1,
+        'payload_json': jsonEncode({
+          'globalId': productGlobalId,
+          'businessGlobalId': ctx.businessGlobalId,
+          'categoryGlobalId': categoryGlobalId,
+          'code': normalizedCode,
+          'barcode': normalizedBarcode == null || normalizedBarcode.isEmpty
+              ? null
+              : normalizedBarcode,
+          'name': normalizedName,
+          'presentation': presentation,
+          'salePriceCents': salePriceCents,
+          'minimumStock': minimumStock,
+          'active': active,
+          'updatedAt': now,
+          'authorization': ?authorizationMetadata,
+        }),
+        'created_at': now,
+      });
+    });
+  }
+
   Future<void> changeProductPrice({
     required int productId,
     required int salePriceCents,

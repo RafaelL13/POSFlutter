@@ -52,8 +52,12 @@ void main() {
           .create(concept: 'Denied', amountCents: 100, paymentMethod: 'Card'),
     );
     await _expectDenied(
-      CatalogRepository(database)
-          .addProduct(code: 'P1', name: 'Denied', salePriceCents: 100),
+      CatalogRepository(database).addProduct(
+        code: 'P1',
+        name: 'Denied',
+        categoryId: 999,
+        salePriceCents: 100,
+      ),
     );
     await _expectDenied(CatalogRepository(database).addCategory('Denied'));
     await _expectDenied(CatalogRepository(database).addSupplier('Denied'));
@@ -71,8 +75,12 @@ void main() {
     addTearDown(database.close);
 
     await _expectDenied(
-      CatalogRepository(database)
-          .addProduct(code: 'P1', name: 'Denied', salePriceCents: 100),
+      CatalogRepository(database).addProduct(
+        code: 'P1',
+        name: 'Denied',
+        categoryId: 999,
+        salePriceCents: 100,
+      ),
     );
     await _expectDenied(CatalogRepository(database).addCategory('Denied'));
     await _expectDenied(CatalogRepository(database).addSupplier('Denied'));
@@ -85,12 +93,19 @@ void main() {
     addTearDown(database.close);
     final catalog = CatalogRepository(database);
     final supplierGlobalId = await catalog.addSupplier('Supplier');
+    final categoryGlobalId = await catalog.addCategory('General');
+    final db = await database.open();
+    final category = (await db.query(
+      'categories',
+      where: 'global_id = ?',
+      whereArgs: [categoryGlobalId],
+    )).single;
     final productGlobalId = await catalog.addProduct(
       code: 'P1',
       name: 'Product',
+      categoryId: category['id']! as int,
       salePriceCents: 200,
     );
-    final db = await database.open();
     final supplier = (await db.query(
       'suppliers',
       where: 'global_id = ?',
@@ -119,7 +134,7 @@ void main() {
     expect(await _tableCount(db, 'inventory_lots'), 1);
     expect(await _tableCount(db, 'inventory_movements'), 1);
     expect(await _tableCount(db, 'expenses'), 1);
-    expect(await _tableCount(db, 'sync_queue'), 4);
+    expect(await _tableCount(db, 'sync_queue'), 5);
   });
 
   test('AdminReadOnly blocks every operational repository write', () async {
@@ -153,8 +168,12 @@ void main() {
           .create(concept: 'Denied', amountCents: 100, paymentMethod: 'Card'),
     );
     await _expectDenied(
-      CatalogRepository(database)
-          .addProduct(code: 'P1', name: 'Denied', salePriceCents: 100),
+      CatalogRepository(database).addProduct(
+        code: 'P1',
+        name: 'Denied',
+        categoryId: 999,
+        salePriceCents: 100,
+      ),
     );
     await _expectDenied(CatalogRepository(database).addCategory('Denied'));
     await _expectDenied(CatalogRepository(database).addSupplier('Denied'));
