@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:cryptography/cryptography.dart';
 
 final class PasswordHash {
@@ -10,11 +11,11 @@ final class PasswordHash {
 
 final class PasswordHasher {
   PasswordHasher()
-      : _algorithm = Pbkdf2(
-          macAlgorithm: Hmac.sha256(),
-          iterations: 210000,
-          bits: 256,
-        );
+    : _algorithm = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: 210000,
+        bits: 256,
+      );
 
   final Pbkdf2 _algorithm;
 

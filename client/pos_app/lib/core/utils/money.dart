@@ -11,14 +11,13 @@ int parseMoneyToCents(String value) {
 
   final decimalSeparator =
       normalized.lastIndexOf('.') > normalized.lastIndexOf(',')
-          ? '.'
-          : normalized.contains(',')
-          ? ','
-          : null;
-  final parts =
-      decimalSeparator == null
-          ? [normalized]
-          : normalized.split(decimalSeparator);
+      ? '.'
+      : normalized.contains(',')
+      ? ','
+      : null;
+  final parts = decimalSeparator == null
+      ? [normalized]
+      : normalized.split(decimalSeparator);
   if (parts.length > 2) throw const FormatException('Monto inválido.');
 
   final groupingSeparator = decimalSeparator == '.' ? ',' : '.';

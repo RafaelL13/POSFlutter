@@ -57,9 +57,8 @@ class _BackupScreenState extends State<BackupScreen> {
     try {
       final path = await LocalBackupProvider(appDatabase).createBackup();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Respaldo creado en $path')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Respaldo creado en $path')));
       }
     } catch (_) {
       if (mounted) {
@@ -82,23 +81,22 @@ class _BackupScreenState extends State<BackupScreen> {
     if (values == null || !mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (dialogContext) => AppDialog(
-            title: 'Confirmar restauración',
-            content: const Text(
-              'Esta acción reemplazará los datos locales actuales. Se creará una copia preventiva antes de continuar.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancelar'),
-              ),
-              AppPrimaryButton(
-                label: 'Restaurar datos',
-                onPressed: () => Navigator.pop(dialogContext, true),
-              ),
-            ],
+      builder: (dialogContext) => AppDialog(
+        title: 'Confirmar restauración',
+        content: const Text(
+          'Esta acción reemplazará los datos locales actuales. Se creará una copia preventiva antes de continuar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
           ),
+          AppPrimaryButton(
+            label: 'Restaurar datos',
+            onPressed: () => Navigator.pop(dialogContext, true),
+          ),
+        ],
+      ),
     );
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
@@ -108,12 +106,11 @@ class _BackupScreenState extends State<BackupScreen> {
         capability: Capability.backupRestore,
         operationLabel: 'Restaurar respaldo',
         reason: 'Restauración destructiva confirmada por el usuario',
-        operation:
-            (grant) => LocalBackupProvider(appDatabase).restoreBackup(
-              values.first,
-              reauthenticationGrant: grant,
-              confirmedDestructiveRestore: true,
-            ),
+        operation: (grant) => LocalBackupProvider(appDatabase).restoreBackup(
+          values.first,
+          reauthenticationGrant: grant,
+          confirmedDestructiveRestore: true,
+        ),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -6,16 +6,14 @@ void main() {
   Widget harness({List<TextFormFieldSpec>? fields}) => MaterialApp(
     home: Scaffold(
       body: Builder(
-        builder:
-            (context) => ElevatedButton(
-              onPressed:
-                  () => configuredTextForm(
-                    context,
-                    'Formulario de prueba',
-                    fields ?? const [TextFormFieldSpec('Nombre')],
-                  ),
-              child: const Text('Abrir'),
-            ),
+        builder: (context) => ElevatedButton(
+          onPressed: () => configuredTextForm(
+            context,
+            'Formulario de prueba',
+            fields ?? const [TextFormFieldSpec('Nombre')],
+          ),
+          child: const Text('Abrir'),
+        ),
       ),
     ),
   );

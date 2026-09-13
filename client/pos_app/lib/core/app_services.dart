@@ -8,4 +8,8 @@ final appDatabase = AppDatabase();
 final cloudApiClient = CloudApiClient();
 final localSyncRepository = SyncRepository(database: appDatabase);
 final remoteSyncRepository = RemoteSyncRepository(cloudApiClient);
-final syncService = SyncService(database: appDatabase, local: localSyncRepository, remote: remoteSyncRepository);
+final syncService = SyncService(
+  database: appDatabase,
+  local: localSyncRepository,
+  remote: remoteSyncRepository,
+);

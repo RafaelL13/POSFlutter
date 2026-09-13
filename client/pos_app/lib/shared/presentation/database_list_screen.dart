@@ -40,17 +40,15 @@ class _DatabaseListScreenState extends State<DatabaseListScreen> {
         widget.subtitle ?? 'Consulta y administra la información disponible.',
     showNavigation: widget.showNavigation,
     scrollable: false,
-    primaryAction:
-        widget.action == null
-            ? null
-            : AppPrimaryButton(
-              label:
-                  _submitting
-                      ? 'Guardando…'
-                      : widget.actionLabel ?? 'Nuevo registro',
-              icon: Icons.add,
-              onPressed: _submitting ? null : _runAction,
-            ),
+    primaryAction: widget.action == null
+        ? null
+        : AppPrimaryButton(
+            label: _submitting
+                ? 'Guardando…'
+                : widget.actionLabel ?? 'Nuevo registro',
+            icon: Icons.add,
+            onPressed: _submitting ? null : _runAction,
+          ),
     body: FutureBuilder<List<Map<String, Object?>>>(
       future: _load(),
       builder: (c, s) {
@@ -60,29 +58,27 @@ class _DatabaseListScreenState extends State<DatabaseListScreen> {
         if (rows.isEmpty) {
           return AppEmptyState(
             message: 'No hay ${widget.title.toLowerCase()} registrados.',
-            action:
-                widget.action == null
-                    ? null
-                    : AppPrimaryButton(
-                      label: widget.actionLabel ?? 'Nuevo registro',
-                      icon: Icons.add,
-                      onPressed: _submitting ? null : _runAction,
-                    ),
+            action: widget.action == null
+                ? null
+                : AppPrimaryButton(
+                    label: widget.actionLabel ?? 'Nuevo registro',
+                    icon: Icons.add,
+                    onPressed: _submitting ? null : _runAction,
+                  ),
           );
         }
         return Card(
           child: ListView.separated(
             itemCount: rows.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder:
-                (_, i) => ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.xs,
-                  ),
-                  title: Text(rows[i].values.skip(1).take(2).join(' · ')),
-                  subtitle: Text(_humanReadable(rows[i])),
-                ),
+            itemBuilder: (_, i) => ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
+              title: Text(rows[i].values.skip(1).take(2).join(' · ')),
+              subtitle: Text(_humanReadable(rows[i])),
+            ),
           ),
         );
       },
@@ -170,59 +166,53 @@ Future<List<String>?> configuredTextForm(
   );
   final result = await showDialog<List<String>>(
     context: context,
-    builder:
-        (d) => AppDialog(
-          title: title,
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < fields.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: AppTextField(
-                        label: fields[i].label,
-                        controller: controllers[i],
-                        required: fields[i].required,
-                        helperText: fields[i].helperText,
-                        autofocus: i == 0,
-                        textInputAction:
-                            i == fields.length - 1
-                                ? TextInputAction.done
-                                : TextInputAction.next,
-                        keyboardType:
-                            fields[i].numeric
-                                ? TextInputType.numberWithOptions(
-                                  decimal: true,
-                                  signed: fields[i].allowNegative,
-                                )
-                                : null,
-                        validator: (value) => _validateField(value, fields[i]),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+    builder: (d) => AppDialog(
+      title: title,
+      content: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < fields.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AppTextField(
+                    label: fields[i].label,
+                    controller: controllers[i],
+                    required: fields[i].required,
+                    helperText: fields[i].helperText,
+                    autofocus: i == 0,
+                    textInputAction: i == fields.length - 1
+                        ? TextInputAction.done
+                        : TextInputAction.next,
+                    keyboardType: fields[i].numeric
+                        ? TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: fields[i].allowNegative,
+                          )
+                        : null,
+                    validator: (value) => _validateField(value, fields[i]),
+                  ),
+                ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(d),
-              child: const Text('Cancelar'),
-            ),
-            AppPrimaryButton(
-              label: 'Guardar',
-              onPressed: () {
-                if (!(formKey.currentState?.validate() ?? false)) return;
-                Navigator.pop(
-                  d,
-                  controllers.map((e) => e.text.trim()).toList(),
-                );
-              },
-            ),
-          ],
         ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(d),
+          child: const Text('Cancelar'),
+        ),
+        AppPrimaryButton(
+          label: 'Guardar',
+          onPressed: () {
+            if (!(formKey.currentState?.validate() ?? false)) return;
+            Navigator.pop(d, controllers.map((e) => e.text.trim()).toList());
+          },
+        ),
+      ],
+    ),
   );
   // showDialog completes when the route starts closing; wait until its reverse
   // animation no longer references the field controllers before disposing them.

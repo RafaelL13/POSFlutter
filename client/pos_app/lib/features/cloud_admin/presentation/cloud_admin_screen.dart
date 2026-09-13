@@ -19,58 +19,74 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
   late final CloudAdminRepository repo = CloudAdminRepository(cloudApiClient);
 
   @override
-  Widget build(BuildContext context) => ref.watch(effectiveCapabilitiesProvider).when(
-      data: (effective) => _buildScaffold(context, effective),
-      loading: () => _buildScaffold(context, const EffectiveCapabilities.denied()),
-      error: (_, _) => _buildScaffold(context, const EffectiveCapabilities.denied()),
-    );
+  Widget build(BuildContext context) => ref
+      .watch(effectiveCapabilitiesProvider)
+      .when(
+        data: (effective) => _buildScaffold(context, effective),
+        loading: () =>
+            _buildScaffold(context, const EffectiveCapabilities.denied()),
+        error: (_, _) =>
+            _buildScaffold(context, const EffectiveCapabilities.denied()),
+      );
 
   Widget _buildScaffold(
     BuildContext context,
     EffectiveCapabilities effective,
   ) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Administración remota'),
-          actions: [
-            if (effective.can(Capability.enrollment))
-              IconButton(tooltip: 'Invitar dispositivo administrativo', onPressed: _invite, icon: const Icon(Icons.devices)),
-          ],
-        ),
-        drawer: AppNavigationDrawer(capabilities: effective),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            FutureBuilder<Map<String, Object?>>(
-              future: repo.dashboard(),
-              builder: (context, snapshot) => Card(
-                child: ListTile(
-                  title: const Text('Dashboard cloud'),
-                  subtitle: Text(snapshot.hasData ? snapshot.data.toString() : snapshot.hasError ? 'No disponible' : 'Cargando...'),
-                ),
+    appBar: AppBar(
+      title: const Text('Administración remota'),
+      actions: [
+        if (effective.can(Capability.enrollment))
+          IconButton(
+            tooltip: 'Invitar dispositivo administrativo',
+            onPressed: _invite,
+            icon: const Icon(Icons.devices),
+          ),
+      ],
+    ),
+    drawer: AppNavigationDrawer(capabilities: effective),
+    body: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        FutureBuilder<Map<String, Object?>>(
+          future: repo.dashboard(),
+          builder: (context, snapshot) => Card(
+            child: ListTile(
+              title: const Text('Dashboard cloud'),
+              subtitle: Text(
+                snapshot.hasData
+                    ? snapshot.data.toString()
+                    : snapshot.hasError
+                    ? 'No disponible'
+                    : 'Cargando...',
               ),
             ),
-            if (effective.can(Capability.reportsFinancial))
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.analytics_outlined),
-                  title: const Text('Reportes remotos'),
-                  subtitle: const Text('Ventas, utilidad, inventario, compras, gastos, caja y tendencias'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.go('/cloud-admin/reports'),
-                ),
-              ),
-            for (final entry in _cloudReadEntries)
-              if (effective.can(entry.capability))
-              Card(
-                child: ListTile(
-                  title: Text(entry.label),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _show(entry.label, entry.path),
-                ),
-              ),
-          ],
+          ),
         ),
-      );
+        if (effective.can(Capability.reportsFinancial))
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.analytics_outlined),
+              title: const Text('Reportes remotos'),
+              subtitle: const Text(
+                'Ventas, utilidad, inventario, compras, gastos, caja y tendencias',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/cloud-admin/reports'),
+            ),
+          ),
+        for (final entry in _cloudReadEntries)
+          if (effective.can(entry.capability))
+            Card(
+              child: ListTile(
+                title: Text(entry.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _show(entry.label, entry.path),
+              ),
+            ),
+      ],
+    ),
+  );
 
   Future<void> _show(String title, String path) async {
     try {
@@ -83,13 +99,26 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
           content: SizedBox(
             width: 650,
             height: 450,
-            child: ListView.builder(itemCount: items.length, itemBuilder: (_, index) => ListTile(title: Text(items[index].toString()))),
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (_, index) =>
+                  ListTile(title: Text(items[index].toString())),
+            ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
         ),
       );
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No fue posible consultar la nube.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No fue posible consultar la nube.')),
+        );
+      }
     }
   }
 
@@ -101,26 +130,72 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Código de invitación'),
-          content: SelectableText('${json['code'] ?? json['invitationCode']}\nExpira: ${json['expiresAt']}'),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar'))],
+          content: SelectableText(
+            '${json['code'] ?? json['invitationCode']}\nExpira: ${json['expiresAt']}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cerrar'),
+            ),
+          ],
         ),
       );
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No fue posible generar la invitación.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No fue posible generar la invitación.'),
+          ),
+        );
+      }
     }
   }
 }
 
-const _cloudReadEntries = <({String label, String path, Capability capability})>[
-  (label: 'Ventas', path: '/api/sales', capability: Capability.saleHistory),
-  (label: 'Productos', path: '/api/products', capability: Capability.productRead),
-  (label: 'Categorías', path: '/api/categories', capability: Capability.categoryRead),
-  (label: 'Proveedores', path: '/api/suppliers', capability: Capability.supplierRead),
-  (label: 'Inventario', path: '/api/inventory', capability: Capability.inventoryAvailabilityRead),
-  (label: 'Lotes', path: '/api/inventory/lots', capability: Capability.inventoryLotsRead),
-  (label: 'Compras', path: '/api/purchases', capability: Capability.purchaseRead),
-  (label: 'Gastos', path: '/api/expenses', capability: Capability.expenseRead),
-  (label: 'Caja', path: '/api/cash', capability: Capability.cashRead),
-  (label: 'Usuarios', path: '/api/users', capability: Capability.usersRead),
-  (label: 'Dispositivos', path: '/api/devices', capability: Capability.devicesRead),
-];
+const _cloudReadEntries =
+    <({String label, String path, Capability capability})>[
+      (label: 'Ventas', path: '/api/sales', capability: Capability.saleHistory),
+      (
+        label: 'Productos',
+        path: '/api/products',
+        capability: Capability.productRead,
+      ),
+      (
+        label: 'Categorías',
+        path: '/api/categories',
+        capability: Capability.categoryRead,
+      ),
+      (
+        label: 'Proveedores',
+        path: '/api/suppliers',
+        capability: Capability.supplierRead,
+      ),
+      (
+        label: 'Inventario',
+        path: '/api/inventory',
+        capability: Capability.inventoryAvailabilityRead,
+      ),
+      (
+        label: 'Lotes',
+        path: '/api/inventory/lots',
+        capability: Capability.inventoryLotsRead,
+      ),
+      (
+        label: 'Compras',
+        path: '/api/purchases',
+        capability: Capability.purchaseRead,
+      ),
+      (
+        label: 'Gastos',
+        path: '/api/expenses',
+        capability: Capability.expenseRead,
+      ),
+      (label: 'Caja', path: '/api/cash', capability: Capability.cashRead),
+      (label: 'Usuarios', path: '/api/users', capability: Capability.usersRead),
+      (
+        label: 'Dispositivos',
+        path: '/api/devices',
+        capability: Capability.devicesRead,
+      ),
+    ];
