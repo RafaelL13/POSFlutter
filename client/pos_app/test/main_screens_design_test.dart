@@ -80,4 +80,37 @@ void main() {
       }
     }
   }
+
+  for (final viewport in const [Size(1280, 800), Size(390, 844)]) {
+    testWidgets(
+      'Login remains accessible with keyboard at ${viewport.width}x${viewport.height}',
+      (tester) async {
+        tester.view.physicalSize = viewport;
+        tester.view.devicePixelRatio = 1;
+        tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetViewInsets);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: const LoginScreen(),
+            ),
+          ),
+        );
+        await tester.tap(find.widgetWithText(TextFormField, 'Usuario *'));
+        await tester.pump();
+
+        expect(find.text('Bienvenido'), findsOneWidget);
+        expect(find.text('Usuario *'), findsOneWidget);
+        expect(find.text('Contraseña *'), findsOneWidget);
+        expect(find.text('Iniciar sesión'), findsOneWidget);
+        await tester.ensureVisible(find.text('Iniciar sesión'));
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }
