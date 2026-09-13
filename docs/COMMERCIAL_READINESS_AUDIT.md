@@ -113,10 +113,23 @@ No se detectaron `TODO`, `FIXME`, `HACK`, `UnimplementedError` ni `NotImplemente
 | ID | Problema | Impacto | Evidencia | Solución recomendada | Archivos afectados | Riesgo |
 |---|---|---|---|---|---|---|
 | P0-01 CLOSED | Working copy no superaba analyze/formato | Impedía una base reproducible | FASE A: format 132/0, analyze 0, tests 301/301 y diff-check PASS | Cerrado. Mantener formatter/analyze como gates directos por exit code | Auth y 31 archivos históricos de formato inventariados | Bajo |
-| P0-02 | Checkout operativo fuerza efectivo | Impide registrar correctamente tarjeta/transferencia; caja y reportes quedan semánticamente incorrectos | `PosController.submit()` envía siempre `paymentMethod: 'Cash'`; `canCheckout` siempre exige `receivedCents >= total` | Modelo tipado de pagos; efectivo con recibido/cambio, tarjeta/transferencia exactos sin recibido, mixto con desglose cuya suma sea total; persistir y sincronizar atómicamente | POS controller/screen/repository, schema/migraciones, contratos sync, backend/reportes/tests | Alto |
+| P0-02 MODEL CLOSED / UI OPEN | El modelo interno ya soporta Cash/Card/Transfer y desglose mixto; el checkout visible aún fuerza efectivo | La integridad, caja, sync y reportes ya distinguen componentes; el usuario todavía no puede elegirlos hasta FASE C | FASE B: `sale_payments` SQLite/EF, payload Sale v2 compatible con v1, backfills legacy, suma exacta, cash parcial, cancelación trazable y reportes por componente; 311 Flutter y 65 backend PASS | Completar exclusivamente la UX operacional del checkout en FASE C sin reabrir el modelo | POS controller/screen y tests UAT de cobro | Medio |
 | P0-03 | No hay APK/UAT Android actual verificable | No se conoce comportamiento real de teclado, orientación, reinicio, logout y offline en esta working copy | Build debug falló por loopback; install/launch/logcat no ejecutados | Ejecutar build en host funcional, instalar en tablet/emulador limpio y completar guion E2E offline/reinicio/logcat | Android, procedimientos QA | Medio |
 | P0-04 | Caja no cubre operación comercial diaria | El saldo esperado puede ser incompleto y el cajero no tiene arqueo explicable | UI sólo ofrece abrir/cerrar; no expone entrada/salida ni resumen previo. Reporte remoto reconoce que no sincroniza movimientos manuales | Implementar entradas/salidas tipadas, resumen por método, esperado/contado/diferencia, confirmación fuerte y sync | cash UI/repository/schema/contracts/backend/reportes/tests | Alto |
 | P0-05 CLOSED | Logout no estaba terminado como entrega | Riesgo de sesión confusa y regresión de acceso en dispositivo compartido | FASE A: 4/4 tests específicos y 56/56 matriz auth/router/navigation; sesión y tokens limpios, datos preservados, cancelación segura, doble ejecución bloqueada, `/login`, Back bloqueado y relogin | Cerrado. Logout permanece distinto de desenrolar/borrar/cambiar negocio | auth repository, drawer y tests | Medio |
+
+### Evidencia FASE B — modelo de pagos
+
+- Baseline de implementación: `447e63e5c602e9d487e6140517fbbadc006faf1c`, rama `feature/ux-professionalization`.
+- SQLite avanzó de schema 5 a 6 de forma aditiva. `PRAGMA integrity_check`, `foreign_key_check`, backfill Cash, reapertura sin duplicado y preservación de venta/FIFO/caja/SyncQueue pasan.
+- El repository acepta pagos tipados y confirma venta, pagos, FIFO, stock, kardex, efectivo, auditoría y SyncQueue en una sola transacción. Cash, Card, Transfer y combinaciones de dos/tres métodos están probados; importes cero, negativos o sumas distintas se rechazan.
+- `receivedCents` permanece como metadata de efectivo entregado; el pago Cash representa sólo el importe aplicado y el cambio no se registra como ingreso.
+- Sale sync payload v2 incluye pagos dentro del agregado. El servidor conserva compatibilidad con payload v1, valida suma/métodos/IDs y los retries no duplican pagos.
+- EF migration `20260913135713_AddSalePayments` fue listada y probada contra SQL Server LocalDB desde la migración inicial con una venta Cash histórica; el segundo migrate no duplica filas.
+- Los pagos permanecen asociados a ventas canceladas. La restauración FIFO continúa y sólo el componente Cash genera/revierte efectivo local.
+- Reportes por método distribuyen una venta mixta entre sus componentes; caja usa únicamente el componente Cash y conserva aislamiento tenant.
+- Gates de cierre: format/analyze Flutter PASS, 311/311 Flutter PASS, build backend PASS y 65/65 backend PASS, structural/SQLite/diff-check PASS. APK debug quedó `BLOCKED_BY_ENVIRONMENT` por `java.io.IOException: Unable to establish loopback connection`.
+- Decisión factual: `P0-02_MODEL=CLOSED`; `P0-02_UI=OPEN`. No se expusieron Card/Transfer/Mixed en UI durante FASE B.
 
 ## 4. Mejoras P1
 
