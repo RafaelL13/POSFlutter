@@ -52,7 +52,7 @@ void main() {
     expect(find.text('Utilidad bruta'), findsNothing);
     expect(find.text('Margen'), findsNothing);
     expect(find.text('Gastos'), findsNothing);
-    expect(find.text('Compras'), findsNothing);
+    expect(find.text('Compras'), findsWidgets);
     expect(find.text('Usuarios'), findsNothing);
   });
 

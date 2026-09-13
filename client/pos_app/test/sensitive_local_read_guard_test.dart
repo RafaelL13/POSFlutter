@@ -44,26 +44,33 @@ void main() {
     },
   );
 
-  test('Seller is denied costs, expenses, lots and inventory value', () async {
-    final fixture = await _fixture();
-    addTearDown(fixture.database.close);
-    await fixture.activate('seller');
+  test(
+    'Seller reads purchases without costs and is denied sensitive data',
+    () async {
+      final fixture = await _fixture();
+      addTearDown(fixture.database.close);
+      await fixture.activate('seller');
 
-    await _denied(PurchaseReadRepository(fixture.database).list());
-    await _denied(
-      PurchaseReadRepository(fixture.database).lines(fixture.purchaseId),
-    );
-    await _denied(ExpenseReadRepository(fixture.database).list());
-    await _denied(InventoryReadRepository(fixture.database).lots());
-    await _denied(
-      InventoryReadRepository(fixture.database).inventoryValueCents(),
-    );
+      final purchases = await PurchaseReadRepository(fixture.database).list();
+      expect(purchases, hasLength(1));
+      expect(purchases.single, isNot(contains('total_cents')));
+      final lines = await PurchaseReadRepository(fixture.database)
+          .lines(fixture.purchaseId);
+      expect(lines, hasLength(1));
+      expect(lines.single, isNot(contains('unit_cost_cents')));
+      expect(lines.single, isNot(contains('subtotal_cents')));
+      await _denied(ExpenseReadRepository(fixture.database).list());
+      await _denied(InventoryReadRepository(fixture.database).lots());
+      await _denied(
+        InventoryReadRepository(fixture.database).inventoryValueCents(),
+      );
 
-    final availability = await InventoryReadRepository(fixture.database)
-        .availability();
-    expect(availability.single['stock'], 3);
-    expect(availability.single, isNot(contains('unit_cost_cents')));
-  });
+      final availability = await InventoryReadRepository(fixture.database)
+          .availability();
+      expect(availability.single['stock'], 3);
+      expect(availability.single, isNot(contains('unit_cost_cents')));
+    },
+  );
 
   test(
     'Supervisor reads operations but cannot infer protected costs',
@@ -169,7 +176,9 @@ void main() {
     await fixture.activate('seller');
 
     expect(await SalesReadRepository(fixture.database).list(), hasLength(1));
-    await _denied(PurchaseReadRepository(fixture.database).list());
+    final purchases = await PurchaseReadRepository(fixture.database).list();
+    expect(purchases, hasLength(1));
+    expect(purchases.single, isNot(contains('total_cents')));
     await _denied(
       InventoryReadRepository(fixture.database).inventoryValueCents(),
     );

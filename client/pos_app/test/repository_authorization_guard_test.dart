@@ -4,12 +4,14 @@ import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/features/backup/data/local_backup_provider.dart';
 import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/features/catalog/data/catalog_repository.dart';
+import 'package:pos_app/features/catalog/data/operational_catalog_repository.dart';
 import 'package:pos_app/features/expenses/data/expense_repository.dart';
 import 'package:pos_app/features/inventory/data/inventory_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/features/purchases/data/purchase_repository.dart';
+import 'package:pos_app/features/purchases/data/purchase_read_repository.dart';
 import 'package:pos_app/features/sales/data/sales_repository.dart';
 import 'package:pos_app/sync/sync_pull.dart';
 import 'package:pos_app/sync/sync_repository.dart';
@@ -42,13 +44,6 @@ void main() {
     addTearDown(database.close);
 
     await _expectDenied(
-      PurchaseRepository(database).create(
-        supplierId: 999,
-        supplierGlobalId: 'supplier-denied',
-        lines: const [PurchaseLineInput(999, 'product-denied', 1, 100)],
-      ),
-    );
-    await _expectDenied(
       ExpenseRepository(database)
           .create(concept: 'Denied', amountCents: 100, paymentMethod: 'Card'),
     );
@@ -70,6 +65,78 @@ void main() {
 
     expect(await _counts(database), everyElement(0));
   });
+
+  test(
+    'Seller registers and reads an offline purchase with FIFO stock',
+    () async {
+      final database = await _database(role: 'Seller');
+      addTearDown(database.close);
+      final db = await database.open();
+      final now = DateTime.utc(2026, 9, 13).toIso8601String();
+      final businessId = (await db.query('businesses')).single['id']! as int;
+      final supplierId = await db.insert('suppliers', {
+        'global_id': 'seller-supplier',
+        'business_id': businessId,
+        'name': 'Proveedor existente',
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+      final productId = await db.insert('products', {
+        'global_id': 'seller-product',
+        'business_id': businessId,
+        'code': 'SELL-1',
+        'name': 'Producto existente',
+        'sale_price_cents': 250,
+        'minimum_stock': 0,
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+
+      final catalog = OperationalCatalogRepository(database);
+      expect((await catalog.suppliers()).single.globalId, 'seller-supplier');
+      expect((await catalog.products()).single.globalId, 'seller-product');
+
+      final purchaseGlobalId = await PurchaseRepository(database).create(
+        supplierId: supplierId,
+        supplierGlobalId: 'seller-supplier',
+        lines: [PurchaseLineInput(productId, 'seller-product', 4, 125)],
+        reference: 'Compra Seller offline',
+      );
+
+      final purchase = (await db.query(
+        'purchases',
+        where: 'global_id=?',
+        whereArgs: [purchaseGlobalId],
+      )).single;
+      final lots = await db.query(
+        'inventory_lots',
+        where: 'product_id=?',
+        whereArgs: [productId],
+      );
+      final movements = await db.query(
+        'inventory_movements',
+        where: 'reference_global_id=?',
+        whereArgs: [purchaseGlobalId],
+      );
+      final queued = await db.query(
+        'sync_queue',
+        where: "entity_type='Purchase' AND entity_global_id=?",
+        whereArgs: [purchaseGlobalId],
+      );
+      final visible = await PurchaseReadRepository(database).list();
+
+      expect(purchase['total_cents'], 500);
+      expect(lots.single['initial_quantity'], 4);
+      expect(lots.single['available_quantity'], 4);
+      expect(lots.single['unit_cost_cents'], 125);
+      expect(movements.single['new_stock'], 4);
+      expect(queued, hasLength(1));
+      expect(visible.single['global_id'], purchaseGlobalId);
+      expect(visible.single, isNot(contains('total_cents')));
+    },
+  );
 
   test('Supervisor catalog writes leave SQLite unchanged', () async {
     final database = await _database(role: 'Supervisor');

@@ -51,6 +51,8 @@ void main() {
           '/pos',
           '/products',
           '/categories',
+          '/suppliers',
+          '/purchases',
           '/inventory',
           '/sales',
           '/cash',
@@ -58,8 +60,6 @@ void main() {
           expect(RouteAuthorization.redirect(path, access), isNull);
         }
         for (final path in [
-          '/suppliers',
-          '/purchases',
           '/expenses',
           '/reports',
           '/users',

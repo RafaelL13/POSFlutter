@@ -72,10 +72,8 @@ void main() {
         final authorization = await service.require(Capability.saleCreate);
 
         expect(authorization.context?.userGlobalId, 'user-1');
-        expect(
-          () => service.require(Capability.purchaseCreate),
-          throwsA(isA<AuthorizationDeniedException>()),
-        );
+        final purchase = await service.require(Capability.purchaseCreate);
+        expect(purchase.context?.userGlobalId, 'user-1');
       },
     );
   });
@@ -98,7 +96,7 @@ void main() {
       );
 
       expect(
-        () => authorization.require(Capability.purchaseCreate),
+        () => authorization.require(Capability.supplierWrite),
         throwsA(isA<AuthorizationDeniedException>()),
       );
     });

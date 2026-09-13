@@ -203,10 +203,22 @@ void main() {
   });
 
   group('Seller policy', () {
-    test('can create sale', () {
+    test('can create sales and purchases and read purchase catalogs', () {
       expect(
         RolePolicy.permissionFor(AppRole.seller, Capability.saleCreate),
         PermissionLevel.full,
+      );
+      expect(
+        RolePolicy.permissionFor(AppRole.seller, Capability.purchaseCreate),
+        PermissionLevel.full,
+      );
+      expect(
+        RolePolicy.permissionFor(AppRole.seller, Capability.purchaseRead),
+        PermissionLevel.read,
+      );
+      expect(
+        RolePolicy.permissionFor(AppRole.seller, Capability.supplierRead),
+        PermissionLevel.read,
       );
     });
 
@@ -227,7 +239,6 @@ void main() {
 
     test('cannot perform administrative operations', () {
       for (final capability in <Capability>[
-        Capability.purchaseCreate,
         Capability.expenseCreate,
         Capability.productWrite,
         Capability.categoryWrite,
@@ -365,6 +376,6 @@ void main() {
   });
 
   test('authorization policy version is defined', () {
-    expect(authorizationPolicyVersion, 2);
+    expect(authorizationPolicyVersion, 3);
   });
 }

@@ -29,13 +29,13 @@ void main() {
           'Caja',
           'Productos',
           'Categorías',
+          'Proveedores',
+          'Compras',
           'Inventario',
         ]),
       );
       for (final hidden in [
-        'Compras',
         'Gastos',
-        'Proveedores',
         'Reportes',
         'Usuarios',
         'Respaldos',
@@ -163,7 +163,8 @@ void main() {
 
     expect(find.text('Nueva venta'), findsOneWidget);
     expect(find.text('Productos'), findsOneWidget);
-    expect(find.text('Compras'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Compras'), 250);
+    expect(find.text('Compras'), findsOneWidget);
     expect(find.text('Usuarios'), findsNothing);
     expect(find.text('Administración nube'), findsNothing);
     expect(

@@ -2,7 +2,7 @@ import 'app_role.dart';
 import 'capability.dart';
 import 'device_mode.dart';
 
-const authorizationPolicyVersion = 2;
+const authorizationPolicyVersion = 3;
 
 enum PermissionLevel { none, ownOnly, read, full, requiresAuthorization }
 
@@ -135,6 +135,7 @@ abstract final class RolePolicy {
     return switch (capability) {
       Capability.posAccess ||
       Capability.saleCreate ||
+      Capability.purchaseCreate ||
       Capability.syncPush ||
       Capability.syncPull => PermissionLevel.full,
 
@@ -145,6 +146,8 @@ abstract final class RolePolicy {
 
       Capability.productRead ||
       Capability.categoryRead ||
+      Capability.purchaseRead ||
+      Capability.supplierRead ||
       Capability.inventoryAvailabilityRead => PermissionLevel.read,
 
       Capability.saleCancel ||
