@@ -375,3 +375,69 @@ Un negocio piloto, datos ficticios primero, rollback documentado, soporte y mét
 POSFlutter ya tiene rasgos de producto profesional: integridad transaccional, FIFO histórico, operación offline, controles de autorización, sync durable, backend tenant-safe y una base UI tablet coherente. Lo que todavía lo hace parecer incompleto no es principalmente el color o el estilo: son la ausencia de pagos comerciales, una caja demasiado limitada, falta de configuración/soporte y ausencia de evidencia Android actual.
 
 P0-01 y P0-05 quedaron cerrados en FASE A. Antes de cobrar a un cliente todavía deben cerrarse P0-02 a P0-04, completar las fases B–D y ejecutar la fase I sobre el commit exacto. Hasta entonces, la clasificación correcta es **piloto técnico avanzado, no versión comercial general**.
+
+<!-- PHASE_C_COMMERCIAL_READINESS_UPDATE_2026-09-13 -->
+
+## Actualización de preparación comercial — FASE C
+
+Fecha de validación: 2026-09-13.
+
+Commit funcional validado: `0de6257ecee645023c6957c61988e29b98be1f80` (`feat(pos): add multi-method checkout experience`).
+
+### Estado P0 actualizado
+
+| ID | Estado | Evidencia ejecutada |
+|---|---|---|
+| P0-01 | CLOSED | Gates de formato/analyze ya cerrados en fases previas y regresión actual PASS. |
+| P0-02 | CLOSED | Checkout offline soporta Efectivo, Tarjeta, Transferencia y Mixto. Pago mixto exige suma exacta; el cambio se calcula sólo sobre el componente efectivo. Suite Flutter completa PASS 320/320. |
+| P0-03 | BUILD CLOSED / UAT OPEN | `flutter build apk --debug` PASS sobre el commit de FASE C. APK generado y verificado; instalación/UAT Android real, process-death, rotación, teclado y logcat siguen pendientes. |
+| P0-04 | OPEN | Caja comercial todavía requiere entradas/salidas tipadas, arqueo, esperado/contado/diferencia y conciliación por método. |
+| P0-05 | CLOSED | Logout seguro local cerrado en FASE A y cubierto por regresión posterior. |
+
+### Evidencia ejecutada FASE C
+
+| Gate | Resultado |
+|---|---|
+| Test compacto pago mixto / overflow | PASS |
+| `flutter analyze` | PASS, 0 issues |
+| Tests dirigidos POS/pagos | PASS, 32/32 |
+| `flutter test` | PASS, 320/320 |
+| `dart format --output=none --set-exit-if-changed .` | PASS, 137 archivos, 0 cambios |
+| `git diff --check` | PASS |
+| `tools/structural_gate.py` | PASS; `HIGH_CONFIDENCE_SECRETS=0` |
+| `tools/sqlite_validation.py` | PASS; integridad/FK/rollback/conflictos/FIFO/payment migration verificados |
+| `flutter build apk --debug` | PASS |
+| APK | `client/pos_app/build/app/outputs/flutter-apk/app-debug.apk` |
+| APK size | `193161336` bytes |
+| APK SHA256 | `D1D420EA4336D2DCAA343DF95B75B6D7C27608D3D25E39A9ADF8FE1E4ED0F3FE` |
+
+### Decisiones conservadas
+
+- Las ventas continúan siendo offline-first y no dependen de Internet.
+- Flutter no se conecta directamente a SQL Server.
+- Inventario/costo FIFO y cantidades enteras permanecen sin cambios.
+- `SalePayment` mantiene métodos cerrados `Cash`, `Card` y `Transfer`; `Mixed` es resumen legado, no método persistido.
+- Sólo el componente `Cash` afecta movimientos físicos de caja.
+- En pago mixto, el efectivo recibido no se persiste como ingreso: únicamente el componente Cash de la venta afecta caja.
+- La UI POS continúa exigiendo turno/caja abierta para todas las ventas durante esta fase. La semántica comercial completa se resolverá en FASE D.
+- No existe integración con gateway de tarjeta; tarjeta y transferencia son registros de forma de pago y funcionan offline.
+
+### Deuda técnica observada
+
+El build Android emitió advertencias no bloqueantes sobre futura migración de Flutter a Built-in Kotlin y sobre `cryptography_flutter` aplicando Kotlin Gradle Plugin. No afecta el PASS actual, pero debe revisarse antes de una futura actualización mayor de Flutter.
+
+### Decisión de salida FASE C
+
+`FASE_C=PASS`
+
+`P0-02_MODEL=CLOSED`
+
+`P0-02_UI=CLOSED`
+
+`P0-03_BUILD=CLOSED`
+
+`P0-03_UAT=OPEN`
+
+`P0-04=OPEN`
+
+Siguiente fase: **FASE D — Caja comercial, movimientos y conciliación**.
