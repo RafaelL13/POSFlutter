@@ -20,6 +20,7 @@ public sealed class RemoteReportServiceTests
     {
         var sale = new Sale { GlobalId = Guid.NewGuid(),IdempotencyKey = Guid.NewGuid(),BusinessId = tenant.Business.Id,BranchId = tenant.Branch.Id,DeviceId = tenant.Device.Id,UserId = tenant.User.Id,Folio = Guid.NewGuid().ToString("N")[..8],SaleDateTime = date,SubtotalCents = totalCents,TotalCents = totalCents,FifoCostCents = allocationCostCents,GrossProfitCents = totalCents - allocationCostCents,PaymentMethod = paymentMethod,Status = status,CreatedAt = date,CancelledAt = status == "Cancelled" ? date.AddMinutes(10) : null,CancellationReason = status == "Cancelled" ? "Test" : null };
         test.Db.Sales.Add(sale); await test.Db.SaveChangesAsync();
+        test.Db.SalePayments.Add(new SalePayment { GlobalId = Guid.NewGuid(),SaleId = sale.Id,Method = paymentMethod,AmountCents = totalCents,CreatedAt = date });
         var line = new SaleLine { GlobalId = Guid.NewGuid(),SaleId = sale.Id,ProductGlobalId = product.GlobalId,Quantity = quantity,UnitPriceCents = quantity == 0 ? 0 : totalCents / quantity,TotalCents = totalCents,FifoCostCents = allocationCostCents };
         test.Db.SaleLines.Add(line); await test.Db.SaveChangesAsync();
         test.Db.SaleLotAllocations.Add(new SaleLotAllocation { GlobalId = Guid.NewGuid(),SaleLineId = line.Id,InventoryLotGlobalId = Guid.NewGuid(),Quantity = quantity,UnitCostCents = quantity == 0 ? 0 : allocationCostCents / quantity,TotalCostCents = allocationCostCents });
@@ -110,8 +111,24 @@ public sealed class RemoteReportServiceTests
             new CashSession { GlobalId = Guid.NewGuid(),BusinessId = a.Business.Id,BranchId = a.Branch.Id,DeviceId = a.Device.Id,UserId = a.User.Id,OpenedAt = now.AddHours(-1),OpeningBalanceCents = 500,Status = "Open",UpdatedAt = now },
             new CashSession { GlobalId = Guid.NewGuid(),BusinessId = b.Business.Id,BranchId = b.Branch.Id,DeviceId = b.Device.Id,UserId = b.User.Id,OpenedAt = now.AddHours(-1),OpeningBalanceCents = 9000,Status = "Open",UpdatedAt = now });
         await test.Db.SaveChangesAsync();
-        var result = await new RemoteReportService(test.Db).CashAsync(Context(a),Period(now),1,50,CancellationToken.None);
+        var product = await AddProductAsync(test,a.Business,"CASH","Cash product");
+        var sale = await AddSaleAsync(test,a,product,now,totalCents:100);
+        test.Db.SalePayments.Remove(test.Db.SalePayments.Single(x => x.SaleId == sale.Id));
+        sale.PaymentMethod = "Mixed";
+        test.Db.SalePayments.AddRange(
+            new SalePayment { GlobalId = Guid.NewGuid(),SaleId = sale.Id,Method = "Cash",AmountCents = 30,CreatedAt = now },
+            new SalePayment { GlobalId = Guid.NewGuid(),SaleId = sale.Id,Method = "Card",AmountCents = 70,CreatedAt = now });
+        var productB = await AddProductAsync(test,b.Business,"FOREIGN","Foreign product");
+        await AddSaleAsync(test,b,productB,now,totalCents:9000,paymentMethod:"Transfer");
+        await test.Db.SaveChangesAsync();
+        var service = new RemoteReportService(test.Db);
+        var result = await service.CashAsync(Context(a),Period(now),1,50,CancellationToken.None);
         Assert.Equal(1,result.TotalCount); Assert.Equal(500,result.Items[0].OpeningBalanceCents);
+        Assert.Equal(30,result.Items[0].CashSalesCents); Assert.Equal(530,result.Items[0].CalculatedExpectedCashCents);
+        var methods = await service.PaymentMethodsAsync(Context(a),Period(now),CancellationToken.None);
+        Assert.Equal(30,methods.Single(x => x.PaymentMethod == "Cash").AmountCents);
+        Assert.Equal(70,methods.Single(x => x.PaymentMethod == "Card").AmountCents);
+        Assert.DoesNotContain(methods,x => x.PaymentMethod == "Transfer");
     }
 
     [Fact]

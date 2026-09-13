@@ -408,10 +408,10 @@ public sealed class RemoteReportService(PosDbContext db)
                 c.GlobalId,
                 _db.Users.Where(u => u.BusinessId == tenant.BusinessId && u.Id == c.UserId).Select(u => u.Name).FirstOrDefault() ?? "",
                 c.OpenedAt,c.ClosedAt,c.Status,c.OpeningBalanceCents,
-                _db.Sales.Where(s => s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.PaymentMethod == "Cash" && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)).Sum(s => (long?)s.TotalCents) ?? 0,
+                _db.SalePayments.Where(p => _db.Sales.Any(s => s.Id == p.SaleId && s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)) && p.Method == "Cash").Sum(p => (long?)p.AmountCents) ?? 0,
                 _db.Expenses.Where(e => e.BusinessId == tenant.BusinessId && e.BranchId == c.BranchId && e.DeviceId == c.DeviceId && e.PaymentMethod == "Cash" && e.ExpenseDate >= c.OpenedAt && e.ExpenseDate < (c.ClosedAt ?? period.ToExclusive)).Sum(e => (long?)e.AmountCents) ?? 0,
                 c.OpeningBalanceCents
-                    + (_db.Sales.Where(s => s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.PaymentMethod == "Cash" && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)).Sum(s => (long?)s.TotalCents) ?? 0)
+                    + (_db.SalePayments.Where(p => _db.Sales.Any(s => s.Id == p.SaleId && s.BusinessId == tenant.BusinessId && s.BranchId == c.BranchId && s.DeviceId == c.DeviceId && s.Status == Confirmed && s.SaleDateTime >= c.OpenedAt && s.SaleDateTime < (c.ClosedAt ?? period.ToExclusive)) && p.Method == "Cash").Sum(p => (long?)p.AmountCents) ?? 0)
                     - (_db.Expenses.Where(e => e.BusinessId == tenant.BusinessId && e.BranchId == c.BranchId && e.DeviceId == c.DeviceId && e.PaymentMethod == "Cash" && e.ExpenseDate >= c.OpenedAt && e.ExpenseDate < (c.ClosedAt ?? period.ToExclusive)).Sum(e => (long?)e.AmountCents) ?? 0),
                 c.ExpectedCashCents,c.CountedCashCents,c.DifferenceCents)).ToListAsync(ct);
         return new ReportPage<CashReportRow>(page,pageSize,total,items);
@@ -420,8 +420,10 @@ public sealed class RemoteReportService(PosDbContext db)
     public async Task<IReadOnlyList<PaymentMethodReportRow>> PaymentMethodsAsync(SyncTenantContext tenant,ReportPeriod period,CancellationToken ct)
     {
         await EnsureAsync(tenant,ct);
-        var rows = await SalesIn(tenant,period).Where(x => x.Status == Confirmed).GroupBy(x => x.PaymentMethod)
-            .Select(g => new { PaymentMethod = g.Key,Transactions = g.Count(),Amount = g.Sum(x => x.TotalCents) }).ToListAsync(ct);
+        var rows = await (from payment in _db.SalePayments.AsNoTracking()
+                          join sale in SalesIn(tenant,period).Where(x => x.Status == Confirmed) on payment.SaleId equals sale.Id
+                          group new { payment,sale } by payment.Method into g
+                          select new { PaymentMethod = g.Key,Transactions = g.Select(x => x.sale.Id).Distinct().Count(),Amount = g.Sum(x => x.payment.AmountCents) }).ToListAsync(ct);
         var total = rows.Sum(x => x.Amount);
         return rows.Select(x => new PaymentMethodReportRow(x.PaymentMethod,x.Transactions,x.Amount,Percent(x.Amount,total))).OrderByDescending(x => x.AmountCents).ToList();
     }

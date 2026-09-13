@@ -56,7 +56,8 @@ public sealed record ExpenseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid
 public sealed record CashSessionSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset OpenedAt,long OpeningBalanceCents,string Status,DateTimeOffset? ClosedAt,long? CountedCashCents,long? ExpectedCashCents,long? DifferenceCents);
 public sealed record SaleLotSyncPayload(Guid GlobalId,Guid LotGlobalId,int Quantity,long UnitCostCents,long TotalCostCents);
 public sealed record SaleLineSyncPayload(Guid DetailGlobalId,Guid ProductGlobalId,int Quantity,long UnitPriceCents,long TotalCents,long FifoCostCents,IReadOnlyList<SaleLotSyncPayload> Lots);
-public sealed record SaleSyncPayload(Guid GlobalId,Guid IdempotencyKey,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,string Folio,DateTimeOffset SaleDateTime,long SubtotalCents,long DiscountCents,long TotalCents,long FifoCostCents,long GrossProfitCents,string PaymentMethod,long? ReceivedCents,long ChangeCents,IReadOnlyList<SaleLineSyncPayload> Lines);
+public sealed record SalePaymentSyncPayload(Guid GlobalId,string Method,long AmountCents);
+public sealed record SaleSyncPayload(Guid GlobalId,Guid IdempotencyKey,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,string Folio,DateTimeOffset SaleDateTime,long SubtotalCents,long DiscountCents,long TotalCents,long FifoCostCents,long GrossProfitCents,string PaymentMethod,long? ReceivedCents,long ChangeCents,IReadOnlyList<SaleLineSyncPayload> Lines,IReadOnlyList<SalePaymentSyncPayload>? Payments=null);
 public sealed record SaleCancelSyncPayload(Guid GlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset CancelledAt,string Reason);
 
 public sealed record BusinessPullPayload(Guid GlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long ServerVersion);

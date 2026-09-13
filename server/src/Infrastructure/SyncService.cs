@@ -185,7 +185,11 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         SyncTenantContext tenant,
         CancellationToken cancellationToken)
     {
-        if (operation.PayloadVersion != 1)
+        var isSupportedPayloadVersion = operation.PayloadVersion == 1
+            || (operation.PayloadVersion == 2
+                && operation.EntityType == "Sale"
+                && operation.Operation == "Create");
+        if (!isSupportedPayloadVersion)
             throw new UnsupportedSyncOperationException($"Unsupported payload version {operation.PayloadVersion} for {operation.EntityType}.");
         if (operation.GlobalId == Guid.Empty || operation.EntityGlobalId == Guid.Empty)
             throw new ArgumentException("Sync operation IDs are required.");
@@ -877,9 +881,25 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             throw new ArgumentException("Sale total does not match subtotal minus discount.");
         if (payload.FifoCostCents < 0 || payload.GrossProfitCents != payload.TotalCents - payload.FifoCostCents)
             throw new ArgumentException("Sale gross profit does not match FIFO cost.");
-        if (payload.PaymentMethod is not ("Cash" or "Card" or "Transfer" or "Other"))
-            throw new ArgumentException("Invalid payment method.");
         if (payload.Lines.Count == 0) throw new ArgumentException("Sale must contain at least one line.");
+
+        var paymentPayloads = payload.Payments is { Count: > 0 }
+            ? payload.Payments
+            : payload.PaymentMethod is "Cash" or "Card" or "Transfer"
+                ? [new SalePaymentSyncPayload(payload.GlobalId,payload.PaymentMethod,payload.TotalCents)]
+                : throw new ArgumentException("Legacy sale payment method is invalid.");
+        if (paymentPayloads.Any(x => x.AmountCents <= 0 || x.Method is not ("Cash" or "Card" or "Transfer")))
+            throw new ArgumentException("Invalid sale payment.");
+        if (paymentPayloads.Select(x => x.Method).Distinct().Count() != paymentPayloads.Count ||
+            paymentPayloads.Select(x => x.GlobalId).Distinct().Count() != paymentPayloads.Count)
+            throw new ArgumentException("Sale payment methods and IDs must be unique.");
+        if (paymentPayloads.Sum(x => x.AmountCents) != payload.TotalCents)
+            throw new ArgumentException("Sale payments do not equal total.");
+        var cashCents = paymentPayloads.Where(x => x.Method == "Cash").Sum(x => x.AmountCents);
+        if (cashCents == 0 && (payload.ReceivedCents is not null || payload.ChangeCents != 0))
+            throw new ArgumentException("Non-cash sale cannot contain tendered cash or change.");
+        if (cashCents > 0 && (payload.ReceivedCents is null || payload.ReceivedCents < cashCents || payload.ChangeCents != payload.ReceivedCents - cashCents))
+            throw new ArgumentException("Cash tender and change are inconsistent.");
 
         var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
         var sale = new Sale
@@ -897,12 +917,23 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             TotalCents = payload.TotalCents,
             FifoCostCents = payload.FifoCostCents,
             GrossProfitCents = payload.GrossProfitCents,
-            PaymentMethod = payload.PaymentMethod,
+            PaymentMethod = paymentPayloads.Count == 1 ? paymentPayloads[0].Method : "Mixed",
             ReceivedCents = payload.ReceivedCents,
             ChangeCents = payload.ChangeCents,
             Status = "Confirmed",
             CreatedAt = DateTimeOffset.UtcNow
         };
+
+        foreach (var payment in paymentPayloads)
+        {
+            sale.Payments.Add(new SalePayment
+            {
+                GlobalId = payment.GlobalId,
+                Method = payment.Method,
+                AmountCents = payment.AmountCents,
+                CreatedAt = payload.SaleDateTime
+            });
+        }
 
         if (payload.Lines.Select(x => x.ProductGlobalId).Distinct().Count() != payload.Lines.Count)
             throw new ArgumentException("A product cannot appear twice in the same sale.");
