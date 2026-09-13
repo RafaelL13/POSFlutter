@@ -441,3 +441,49 @@ El build Android emitió advertencias no bloqueantes sobre futura migración de 
 `P0-04=OPEN`
 
 Siguiente fase: **FASE D — Caja comercial, movimientos y conciliación**.
+
+<!-- PHASE_D3_CASH_RECONCILIATION_UPDATE_2026-09-13 -->
+
+## Actualización de preparación comercial — FASE D1/D2/D3
+
+La arquitectura comercial de caja se construyó en tres incrementos auditables:
+
+- D1 (`789f209ac4898fe96480cbf48aa520188310b3a2`): modelo local, entradas y retiros transaccionales, autorización, auditoría, SyncQueue y resumen de turno.
+- D2 (`b85c55ddbd977dc8a9246e4884752f7216976b14`): persistencia central, migración EF, sync idempotente, aislamiento y reportes.
+- D3: experiencia tablet de operación y conciliación sobre esos repositorios, sin duplicar reglas en widgets.
+
+La pantalla de Caja ahora distingue turno cerrado/abierto, muestra cajero y apertura, y presenta como dato principal el efectivo esperado. El resumen separa saldo inicial, ventas y gastos en efectivo, entradas, retiros, tarjeta, transferencia y cantidad de ventas. Los movimientos muestran nombres comerciales y signo legible.
+
+Las acciones se derivan de `Capability`: `cashOpen`, `cashDeposit`, `cashWithdrawal`, `cashClose` y `cashCloseWithDifference`. Seller no recibe acciones manuales; Supervisor reutiliza autorización especial local para retiros y diferencias; `AdminReadOnly` no obtiene escrituras. El repositorio conserva la autoridad final y la protección `ownOnly`.
+
+Fórmula vigente:
+
+`efectivo esperado = saldo inicial + ventas cash - gastos cash + entradas manuales - retiros manuales`
+
+Tarjeta y transferencia se muestran para conciliación comercial, pero nunca incrementan el efectivo físico. El arqueo presenta esperado, contado y diferencia antes de mutar: cero es caja cuadrada, positivo es sobrante y negativo es faltante. Sólo un cierre con diferencia pasa por `runWithSpecialAuthorization`; el cierre exacto sigue la ruta normal.
+
+La operación continúa siendo SQLite-first/offline y las mutaciones mantienen auditoría y SyncQueue de D1/D2. D3 no modifica FIFO, lotes, inventario ni contratos del servidor.
+
+### Estado P0 tras D3
+
+| ID | Estado | Nota |
+|---|---|---|
+| P0-04_CODE | CLOSED | Entrada, retiro, permisos, resumen, movimientos, arqueo y cierre están implementados; las suites y gates funcionales D3 quedaron verdes. |
+| P0-03_UAT | OPEN | Falta UAT real en Android: teclado, rotación, process death, operación offline y logcat. |
+
+### Evidencia ejecutada D3
+
+| Gate | Resultado |
+|---|---|
+| `dart format .` | PASS; 138 archivos, 0 cambios pendientes |
+| `flutter analyze` | PASS; 0 issues |
+| Pruebas dirigidas de caja + matriz visual | PASS; 95/95 |
+| `flutter test` | PASS; 328/328 |
+| `dotnet build Pos.Server.sln --no-restore` | PASS; 0 errores, 18 advertencias xUnit no bloqueantes |
+| `dotnet test Pos.Server.sln --no-build` | PASS; 73/73 |
+| `git diff --check` | PASS |
+| `tools/structural_gate.py` | PASS; `HIGH_CONFIDENCE_SECRETS=0` |
+| `tools/sqlite_validation.py` | PASS; integridad, FK, rollback, FIFO y migraciones verificadas |
+| APK debug | `BLOCKED_BY_ENVIRONMENT`: Gradle devolvió `java.io.IOException: Unable to establish loopback connection` |
+
+El bloqueo de APK es del entorno de ejecución y no se clasificó como defecto funcional. No se generó ni se declaró un APK D3 válido. La instalación y validación manual siguen incluidas en `P0-03_UAT=OPEN`.
