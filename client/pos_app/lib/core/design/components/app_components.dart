@@ -13,6 +13,7 @@ class AppPage extends StatelessWidget {
     this.primaryAction,
     this.showNavigation = true,
     this.scrollable = true,
+    this.resizeToAvoidBottomInset = true,
     super.key,
   });
   final String title;
@@ -22,6 +23,7 @@ class AppPage extends StatelessWidget {
   final Widget? primaryAction;
   final bool showNavigation;
   final bool scrollable;
+  final bool resizeToAvoidBottomInset;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +87,7 @@ class AppPage extends StatelessWidget {
       ),
     );
     return Scaffold(
+      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: AppBar(title: const Text('POS Flutter'), actions: actions),
       drawer: showNavigation ? const AppNavigationDrawer() : null,
       body: SafeArea(child: content),
@@ -281,16 +284,25 @@ class AppLoadingState extends StatelessWidget {
   const AppLoadingState({this.label = 'Cargando…', super.key});
   final String label;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: AppSpacing.md),
-          Text(label),
-        ],
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: AppSpacing.md),
+                Text(label),
+              ],
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -308,28 +320,37 @@ class _AppState extends StatelessWidget {
   final Widget? action;
   final Color? color;
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 48,
-            color: color ?? Theme.of(context).colorScheme.primary,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xxl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 48,
+                  color: color ?? Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (action != null) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  action!,
+                ],
+              ],
+            ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          if (action != null) ...[
-            const SizedBox(height: AppSpacing.lg),
-            action!,
-          ],
-        ],
+        ),
       ),
     ),
   );
