@@ -22,7 +22,7 @@ void main() {
     final columns = await db.rawQuery('PRAGMA table_info(sync_queue)');
     final names = columns.map((row) => row['name']).toSet();
 
-    expect(await db.getVersion(), 6);
+    expect(await db.getVersion(), AppDatabase.schemaVersion);
     expect(
       names,
       containsAll(['error_category', 'error_code', 'requires_action']),
@@ -77,7 +77,7 @@ void main() {
       whereArgs: ['pending-v4'],
     )).single;
 
-    expect(await upgraded.getVersion(), 6);
+    expect(await upgraded.getVersion(), AppDatabase.schemaVersion);
     expect(row['status'], 'Error');
     expect(row['retry_count'], 2);
     expect(row['error_message'], 'Legacy error');

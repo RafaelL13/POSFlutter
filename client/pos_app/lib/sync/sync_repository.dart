@@ -386,14 +386,33 @@ final class SyncRepository {
       );
     }
     final payload = change.payload;
+    final values = <String, Object?>{
+      'name': _requiredString(payload, 'name'),
+      'active': _boolInt(payload, 'active'),
+      'updated_at': _requiredDate(payload, 'updatedAt'),
+      'server_version': change.version,
+    };
+    // Older servers omit brandingUpdatedAt. In that case preserve local identity.
+    if (payload.containsKey('brandingUpdatedAt') &&
+        payload['brandingUpdatedAt'] != null) {
+      final encoded = payload['logoBase64'];
+      final decoded = encoded is String && encoded.isNotEmpty
+          ? base64Decode(encoded)
+          : null;
+      if (decoded != null && decoded.length > 256 * 1024) {
+        throw StateError('El logo remoto supera 256 KiB.');
+      }
+      values.addAll({
+        'display_name': payload['displayName'] as String?,
+        'logo_blob': decoded,
+        'logo_mime_type': payload['logoMimeType'] as String?,
+        'primary_color': payload['primaryColor'] as int?,
+        'branding_updated_at': _requiredDate(payload, 'brandingUpdatedAt'),
+      });
+    }
     await tx.update(
       'businesses',
-      {
-        'name': _requiredString(payload, 'name'),
-        'active': _boolInt(payload, 'active'),
-        'updated_at': _requiredDate(payload, 'updatedAt'),
-        'server_version': change.version,
-      },
+      values,
       where: 'id = ?',
       whereArgs: [context.businessId],
     );

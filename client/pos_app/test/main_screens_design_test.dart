@@ -25,7 +25,7 @@ void main() {
       screen: const FirstRunScreen(),
       visibleLabel: 'Primeros pasos',
     ),
-    'Login': (screen: const LoginScreen(), visibleLabel: 'Bienvenido'),
+    'Login': (screen: const LoginScreen(), visibleLabel: 'POS Flutter'),
     'Productos': (screen: const ProductsScreen(), visibleLabel: 'Productos'),
     'Compras': (screen: const PurchasesScreen(), visibleLabel: 'Compras'),
     'Inventario': (screen: const InventoryScreen(), visibleLabel: 'Inventario'),
@@ -103,10 +103,12 @@ void main() {
         await tester.tap(find.widgetWithText(TextFormField, 'Usuario *'));
         await tester.pump();
 
-        expect(find.text('Bienvenido'), findsOneWidget);
+        expect(find.text('POS Flutter'), findsOneWidget);
+        expect(find.text('Sistema de punto de venta'), findsOneWidget);
         expect(find.text('Usuario *'), findsOneWidget);
         expect(find.text('Contraseña *'), findsOneWidget);
         expect(find.text('Iniciar sesión'), findsOneWidget);
+        expect(tester.testTextInput.isVisible, isTrue);
         await tester.ensureVisible(find.text('Iniciar sesión'));
         await tester.pump();
         expect(tester.takeException(), isNull);

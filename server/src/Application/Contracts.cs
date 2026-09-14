@@ -40,7 +40,7 @@ public sealed record EnrolledAdministrativeDevice(Guid BusinessGlobalId,string B
     public EnrollmentUser User => new(UserGlobalId,UserName,Username,Role,UserServerVersion);
 }
 
-public sealed record BusinessSyncPayload(Guid GlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long? BaseServerVersion=null);
+public sealed record BusinessSyncPayload(Guid GlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long? BaseServerVersion=null,string? DisplayName=null,byte[]? LogoBase64=null,string? LogoMimeType=null,int? PrimaryColor=null,DateTimeOffset? BrandingUpdatedAt=null);
 public sealed record BranchSyncPayload(Guid GlobalId,Guid BusinessGlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long? BaseServerVersion=null);
 public sealed record DeviceSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long? BaseServerVersion=null);
 public sealed record UserSyncPayload(Guid GlobalId,Guid BusinessGlobalId,string Name,string Username,string PasswordHash,string PasswordSalt,string Role,bool Active,DateTimeOffset UpdatedAt,long? BaseServerVersion=null);
@@ -72,7 +72,7 @@ public sealed record SalePaymentSyncPayload(Guid GlobalId,string Method,long Amo
 public sealed record SaleSyncPayload(Guid GlobalId,Guid IdempotencyKey,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,string Folio,DateTimeOffset SaleDateTime,long SubtotalCents,long DiscountCents,long TotalCents,long FifoCostCents,long GrossProfitCents,string PaymentMethod,long? ReceivedCents,long ChangeCents,IReadOnlyList<SaleLineSyncPayload> Lines,IReadOnlyList<SalePaymentSyncPayload>? Payments=null);
 public sealed record SaleCancelSyncPayload(Guid GlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset CancelledAt,string Reason);
 
-public sealed record BusinessPullPayload(Guid GlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long ServerVersion);
+public sealed record BusinessPullPayload(Guid GlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long ServerVersion,string? DisplayName=null,byte[]? LogoBase64=null,string? LogoMimeType=null,int? PrimaryColor=null,DateTimeOffset? BrandingUpdatedAt=null);
 public sealed record BranchPullPayload(Guid GlobalId,Guid BusinessGlobalId,string Name,bool Active,DateTimeOffset UpdatedAt,long ServerVersion);
 public sealed record DevicePullPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,string Name,string Mode,bool Active,DateTimeOffset? LastSyncAt,long ServerVersion);
 public sealed record UserPullPayload(Guid GlobalId,Guid BusinessGlobalId,string Name,string Username,string PasswordHash,string PasswordSalt,string Role,bool Active,DateTimeOffset UpdatedAt,long ServerVersion);

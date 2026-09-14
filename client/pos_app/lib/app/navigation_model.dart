@@ -110,6 +110,16 @@ const appNavigationSections = <AppNavigationSection>[
         icon: Icons.cloud_outlined,
         route: '/cloud-admin',
       ),
+      AppNavigationItem(
+        label: 'Configuración',
+        icon: Icons.settings_outlined,
+        route: '/settings',
+      ),
+      AppNavigationItem(
+        label: 'Acerca de',
+        icon: Icons.info_outline,
+        route: '/about',
+      ),
     ],
   ),
 ];

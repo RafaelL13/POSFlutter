@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/design/app_breakpoints.dart';
@@ -6,14 +7,15 @@ import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
 import 'package:pos_app/features/first_run/data/enrollment_repository.dart';
 import 'package:pos_app/features/first_run/data/first_run_service.dart';
+import 'package:pos_app/features/branding/presentation/branding_providers.dart';
 
-class FirstRunScreen extends StatefulWidget {
+class FirstRunScreen extends ConsumerStatefulWidget {
   const FirstRunScreen({super.key});
   @override
-  State<FirstRunScreen> createState() => _FirstRunScreenState();
+  ConsumerState<FirstRunScreen> createState() => _FirstRunScreenState();
 }
 
-class _FirstRunScreenState extends State<FirstRunScreen> {
+class _FirstRunScreenState extends ConsumerState<FirstRunScreen> {
   bool _busy = false;
   @override
   void initState() {
@@ -88,6 +90,7 @@ class _FirstRunScreenState extends State<FirstRunScreen> {
         password: values[3],
         deviceName: values[4],
       );
+      ref.invalidate(businessBrandingProvider);
       if (mounted) context.go('/login');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -110,6 +113,7 @@ class _FirstRunScreenState extends State<FirstRunScreen> {
         password: values[2],
         deviceName: values[3],
       );
+      ref.invalidate(businessBrandingProvider);
       if (mounted) {
         context.go('/cloud-admin');
       }

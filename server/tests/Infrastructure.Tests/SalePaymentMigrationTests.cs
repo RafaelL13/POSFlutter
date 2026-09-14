@@ -58,7 +58,12 @@ public sealed class SalePaymentMigrationTests
     {
         var now = DateTimeOffset.UtcNow;
         var business = new Business { GlobalId = Guid.NewGuid(),Name = "Legacy",CreatedAt = now,UpdatedAt = now };
-        db.Businesses.Add(business); await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO Businesses (GlobalId,Name,Active,CreatedAt,UpdatedAt,ServerVersion) VALUES ({business.GlobalId},{business.Name},{true},{business.CreatedAt},{business.UpdatedAt},{1L})",
+            TestContext.Current.CancellationToken);
+        business.Id = await db.Database.SqlQuery<long>(
+            $"SELECT Id AS Value FROM Businesses WHERE GlobalId={business.GlobalId}")
+            .SingleAsync(TestContext.Current.CancellationToken);
         var branch = new Branch { GlobalId = Guid.NewGuid(),BusinessId = business.Id,Name = "Main",CreatedAt = now,UpdatedAt = now };
         db.Branches.Add(branch); await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var device = new Device { GlobalId = Guid.NewGuid(),BranchId = branch.Id,Name = "POS",Mode = "PointOfSale",CreatedAt = now };

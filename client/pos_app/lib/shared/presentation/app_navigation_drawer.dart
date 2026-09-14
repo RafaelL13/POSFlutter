@@ -8,6 +8,9 @@ import 'package:pos_app/core/authorization/authorization_providers.dart';
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/sync/presentation/sync_status_panel.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
+import 'package:pos_app/features/branding/data/business_branding_repository.dart';
+import 'package:pos_app/features/branding/presentation/brand_logo.dart';
+import 'package:pos_app/features/branding/presentation/branding_providers.dart';
 
 class AppNavigationDrawer extends ConsumerWidget {
   const AppNavigationDrawer({
@@ -36,8 +39,10 @@ class AppNavigationDrawer extends ConsumerWidget {
         currentRoute: currentRoute,
         showSyncStatus: false,
         onLogout: logout,
+        branding: const BusinessBranding.fallback(),
       );
     }
+    final branding = resolvedBranding(ref.watch(businessBrandingProvider));
     return ref
         .watch(effectiveCapabilitiesProvider)
         .when(
@@ -46,16 +51,19 @@ class AppNavigationDrawer extends ConsumerWidget {
             currentRoute: currentRoute,
             showSyncStatus: true,
             onLogout: logout,
+            branding: branding,
           ),
           loading: () => _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
             showSyncStatus: false,
             onLogout: logout,
+            branding: branding,
           ),
           error: (_, _) => _NavigationDrawer(
             capabilities: EffectiveCapabilities.denied(),
             showSyncStatus: false,
             onLogout: logout,
+            branding: branding,
           ),
         );
   }
@@ -66,6 +74,7 @@ class _NavigationDrawer extends StatefulWidget {
     required this.capabilities,
     required this.showSyncStatus,
     required this.onLogout,
+    required this.branding,
     this.currentRoute,
   });
 
@@ -73,6 +82,7 @@ class _NavigationDrawer extends StatefulWidget {
   final String? currentRoute;
   final bool showSyncStatus;
   final Future<void> Function() onLogout;
+  final BusinessBranding branding;
 
   @override
   State<_NavigationDrawer> createState() => _NavigationDrawerState();
@@ -98,22 +108,21 @@ class _NavigationDrawerState extends State<_NavigationDrawer> {
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.storefront,
-                  size: 32,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+                BrandLogo(branding: widget.branding, size: 40),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'POS Flutter',
+                        widget.branding.displayName,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       Text(
-                        'Operación comercial',
+                        [
+                          widget.branding.branchName,
+                          widget.branding.deviceName,
+                        ].whereType<String>().join(' · '),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],

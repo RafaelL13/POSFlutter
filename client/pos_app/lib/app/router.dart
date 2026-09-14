@@ -22,6 +22,8 @@ import 'package:pos_app/features/reports/presentation/reports_screen.dart';
 import 'package:pos_app/features/sales/presentation/sales_screen.dart';
 import 'package:pos_app/features/suppliers/presentation/suppliers_screen.dart';
 import 'package:pos_app/features/users/presentation/users_screen.dart';
+import 'package:pos_app/settings/presentation/about_screen.dart';
+import 'package:pos_app/settings/presentation/settings_screen.dart';
 
 typedef RouteAccessLoader = Future<RouteAccessState> Function();
 
@@ -66,6 +68,8 @@ GoRouter createAppRouter({
         GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
         GoRoute(path: '/users', builder: (_, _) => const UsersScreen()),
         GoRoute(path: '/backup', builder: (_, _) => const BackupScreen()),
+        GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+        GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
         GoRoute(
           path: '/cloud-admin',
           builder: (_, _) => const CloudAdminScreen(),

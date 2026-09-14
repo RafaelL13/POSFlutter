@@ -3,14 +3,13 @@ import 'package:pos_app/core/design/app_colors.dart';
 import 'package:pos_app/core/design/app_radius.dart';
 
 abstract final class AppTheme {
-  static ThemeData get light {
+  static ThemeData get light => lightFromSeed();
+
+  static ThemeData lightFromSeed([Color? brandedColor]) {
+    final seed = brandedColor ?? AppColors.primary;
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
+      seedColor: seed,
       brightness: Brightness.light,
-      primary: AppColors.primary,
-      secondary: AppColors.secondary,
-      error: AppColors.error,
-      surface: AppColors.surface,
     );
     final radius = BorderRadius.circular(AppRadius.medium);
     return ThemeData(

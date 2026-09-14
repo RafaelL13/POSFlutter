@@ -487,3 +487,13 @@ La operación continúa siendo SQLite-first/offline y las mutaciones mantienen a
 | APK debug | `BLOCKED_BY_ENVIRONMENT`: Gradle devolvió `java.io.IOException: Unable to establish loopback connection` |
 
 El bloqueo de APK es del entorno de ejecución y no se clasificó como defecto funcional. No se generó ni se declaró un APK D3 válido. La instalación y validación manual siguen incluidas en `P0-03_UAT=OPEN`.
+
+<!-- PHASE_E_BUSINESS_BRANDING_UPDATE_2026-09-13 -->
+
+## Actualización de preparación comercial — FASE E
+
+Se implementó la identidad configurable del negocio como vertical offline-first: SQLite schema 7, repository autorizado y transaccional, SyncQueue, contratos compatibles, persistencia ASP.NET Core/EF, pull, tema reactivo y presentación en login/shell. La migración `AddBusinessBranding` fue generada con `dotnet ef`; los campos son anulables y los payloads antiguos preservan branding mediante el marcador `brandingUpdatedAt`.
+
+La configuración admite nombre comercial, logo PNG/JPEG/WebP de hasta 256 KiB y una paleta controlada. Seller, Supervisor y AdminReadOnly pueden leer la identidad pero no modificarla. La pantalla Acerca de muestra únicamente versión/build, sucursal, dispositivo, modo y schema local.
+
+Las operaciones comerciales permanecen independientes de branding y de Internet. La validación Android/UAT continúa abierta como `P0-03_UAT=OPEN` hasta ejecutar pruebas reales de teclado, rotación, process death, operación offline y logcat.

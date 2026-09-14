@@ -289,6 +289,11 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             entity.ServerVersion = Math.Max(1, entity.ServerVersion);
         }
 
+        if (payload.BrandingUpdatedAt is not null)
+        {
+            ApplyBusinessBranding(entity, payload);
+        }
+
         AddChange(tenant.BusinessId, "Business", entity.GlobalId, operation.Operation, entity.ServerVersion, BuildBusinessPayload(entity));
     }
 
@@ -1380,7 +1385,45 @@ public sealed class SyncService(PosDbContext db) : ISyncService
     }
 
     private static BusinessPullPayload BuildBusinessPayload(Business entity) =>
-        new(entity.GlobalId, entity.Name, entity.Active, entity.UpdatedAt, entity.ServerVersion);
+        new(entity.GlobalId, entity.Name, entity.Active, entity.UpdatedAt, entity.ServerVersion,
+            entity.DisplayName, entity.LogoBlob, entity.LogoMimeType, entity.PrimaryColor, entity.BrandingUpdatedAt);
+
+    private static void ApplyBusinessBranding(Business entity, BusinessSyncPayload payload)
+    {
+        var displayName = payload.DisplayName?.Trim();
+        if (string.IsNullOrWhiteSpace(displayName) || displayName.Length > 160)
+            throw new ArgumentException("DisplayName is required and limited to 160 characters when branding is supplied.");
+        if (payload.LogoBase64 is { Length: > 262144 })
+            throw new ArgumentException("Business logo exceeds 256 KiB.");
+        if (payload.LogoBase64 is not null)
+        {
+            if (payload.LogoMimeType is not ("image/png" or "image/jpeg" or "image/webp"))
+                throw new ArgumentException("Business logo MIME type is invalid.");
+            if (!HasValidImageSignature(payload.LogoBase64, payload.LogoMimeType))
+                throw new ArgumentException("Business logo content does not match its MIME type.");
+        }
+        else if (payload.LogoMimeType is not null)
+        {
+            throw new ArgumentException("LogoMimeType requires logo bytes.");
+        }
+        if (payload.PrimaryColor is not null && payload.PrimaryColor is not (
+            0x1565c0 or 0x3949ab or 0x00897b or 0x2e7d32 or
+            0xef6c00 or 0xc62828 or 0x7b1fa2 or 0x455a64))
+            throw new ArgumentException("PrimaryColor is outside the supported palette.");
+        entity.DisplayName = displayName;
+        entity.LogoBlob = payload.LogoBase64;
+        entity.LogoMimeType = payload.LogoMimeType;
+        entity.PrimaryColor = payload.PrimaryColor;
+        entity.BrandingUpdatedAt = payload.BrandingUpdatedAt;
+    }
+
+    private static bool HasValidImageSignature(byte[] bytes, string mime) => mime switch
+    {
+        "image/png" => bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4e && bytes[3] == 0x47,
+        "image/jpeg" => bytes.Length >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff,
+        "image/webp" => bytes.Length >= 12 && bytes[0] == (byte)'R' && bytes[1] == (byte)'I' && bytes[2] == (byte)'F' && bytes[3] == (byte)'F' && bytes[8] == (byte)'W' && bytes[9] == (byte)'E' && bytes[10] == (byte)'B' && bytes[11] == (byte)'P',
+        _ => false
+    };
 
     private static BranchPullPayload BuildBranchPayload(Branch entity, Guid businessGlobalId) =>
         new(entity.GlobalId, businessGlobalId, entity.Name, entity.Active, entity.UpdatedAt, entity.ServerVersion);

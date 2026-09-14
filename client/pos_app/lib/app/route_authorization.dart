@@ -31,6 +31,8 @@ abstract final class RouteAuthorization {
     '/reports': {Capability.reportsOperational},
     '/users': {Capability.usersRead},
     '/backup': {Capability.backupCreate},
+    '/settings': {Capability.businessWrite},
+    '/about': {Capability.productRead},
     '/cloud-admin': {Capability.cloudAdminRead},
     '/cloud-admin/reports': {
       Capability.cloudAdminRead,

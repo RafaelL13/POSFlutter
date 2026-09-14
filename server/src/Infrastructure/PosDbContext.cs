@@ -12,7 +12,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
 
     protected override void OnModelCreating(ModelBuilder b)
     {
-        b.Entity<Business>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.Property(x=>x.Name).HasMaxLength(160); });
+        b.Entity<Business>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.Property(x=>x.Name).HasMaxLength(160); e.Property(x=>x.DisplayName).HasMaxLength(160); e.Property(x=>x.LogoMimeType).HasMaxLength(32); });
         b.Entity<Branch>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); e.Property(x=>x.Name).HasMaxLength(160); });
         b.Entity<Device>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.Property(x=>x.Name).HasMaxLength(120); e.Property(x=>x.Mode).HasMaxLength(32); e.ToTable(t=>t.HasCheckConstraint("CK_Device_Mode", "[Mode] IN ('PointOfSale','AdminReadOnly')")); });
         b.Entity<UserAccount>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.Username}).IsUnique(); e.Property(x=>x.Username).HasMaxLength(100); e.Property(x=>x.Role).HasMaxLength(32); });

@@ -35,6 +35,8 @@ final class FirstRunService {
       final businessId = await tx.insert('businesses', {
         'global_id': businessGid,
         'name': businessName.trim(),
+        'display_name': businessName.trim(),
+        'branding_updated_at': now,
         'created_at': now,
         'updated_at': now,
       });
@@ -82,6 +84,11 @@ final class FirstRunService {
         'active': true,
         'updatedAt': now,
         'serverVersion': 0,
+        'displayName': businessName.trim(),
+        'logoBase64': null,
+        'logoMimeType': null,
+        'primaryColor': null,
+        'brandingUpdatedAt': now,
       };
       await tx.insert('sync_queue', {
         'global_id': _ids.newId(),
