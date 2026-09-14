@@ -288,3 +288,36 @@ Performance result:
 - `PERFORMANCE_P1_STATUS=CONFIRMED`.
 - `P2-CASH_KPI_SEMANTICS=OPEN`.
 - `P2-LOGIN_KEYBOARD_REACHABILITY=OPEN`.
+
+## FASE F2 offline-first login correction
+
+The confirmed profile baseline remains `LOGIN_MEDIAN_MS=10622`; it is preserved above and is not replaced by an automated-test estimate.
+
+- `PERFORMANCE_P1_ROOT_CAUSE=Local authentication succeeded, but dashboard navigation synchronously awaited cloud bootstrap and cloud authentication with network timeouts on the critical path.`
+- `PERFORMANCE_P1_FIX=Local session creation and authorized dashboard navigation no longer await cloud work. Bootstrap and remote authentication run as controlled best-effort background work.`
+- `PERFORMANCE_P1_AUTOMATED_TEST=PASS_4/4`.
+- `PHYSICAL_PROFILE_RETEST=PENDING`.
+
+Safety properties of the correction:
+
+- Cloud errors are consumed by the background coordinator and cannot invalidate a successful local login.
+- A monotonically increasing in-process session generation plus the persisted active-user identity rejects late cloud responses after logout or a subsequent login.
+- Secure token writes and logout token clearing are serialized, preventing an old response from overwriting or resurrecting credentials across session transitions.
+- AdminReadOnly keeps its existing online administrative authentication requirement; first-run/enrollment behavior is unchanged.
+- No new modal or blocking cloud error UI was introduced. Existing synchronization/offline status remains responsible for communicating remote availability.
+
+Automated evidence:
+
+- `LOCAL_LOGIN_DOES_NOT_WAIT_FOR_CLOUD=PASS`.
+- `CLOUD_FAILURE_DOES_NOT_BREAK_LOCAL_LOGIN=PASS`.
+- `CLOUD_SUCCESS_UPDATES_REMOTE_STATE_LATER=PASS`.
+- `LATE_CLOUD_RESULT_AFTER_LOGOUT_IS_IGNORED=PASS`.
+- Flutter analyzer: PASS, 0 issues.
+- Flutter full suite: PASS, 345/345. One unrelated pending-timer failure in a first-run responsive test passed immediately in isolation and the complete clean rerun passed 345/345.
+- Backend build: PASS, 0 errors and 18 pre-existing xUnit analyzer warnings.
+- Backend suite: PASS, 78/78 through the test assembly's xUnit v3 in-process runner. The `dotnet test` wrapper intermittently returned exit code 5 with no tests executed, while discovery listed all 78 tests; direct assembly execution ran all tests successfully.
+- Structural gate: PASS; `HIGH_CONFIDENCE_SECRETS=0`.
+- SQLite validation: PASS.
+- `git diff --check`: PASS.
+
+The source correction is complete but the performance P1 remains physically open until a new Profile APK is produced outside the restricted environment, installed without clearing UAT data, and login is measured again on the same tablet.
