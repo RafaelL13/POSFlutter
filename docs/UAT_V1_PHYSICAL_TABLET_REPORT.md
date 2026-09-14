@@ -190,3 +190,15 @@ Pre-commit validation of the correction:
 - `git diff --check`: PASS.
 
 Status: the source-level correction is validated, but P1-01 remains open until a new APK is built, installed with `adb install -r` without clearing application data, and the cancellation is repeated physically with clean logcat. The new corrective commit and candidate SHA-256 are recorded after creation; physical retest is pending at this point in the history.
+
+Correction commit: `718e0bf` (`fix(sales): avoid async setState after cancellation`).
+
+Candidate build result after the commit:
+
+- Debug APK: `BLOCKED_BY_ENVIRONMENT`. Three executions (direct Flutter, `cmd.exe`, and redirected `cmd.exe`) failed with `java.io.IOException: Unable to establish loopback connection` during `assembleDebug`.
+- Profile APK: `BLOCKED_BY_ENVIRONMENT` with the same loopback failure during `assembleProfile`.
+- New APK SHA-256: unavailable because no new APK was produced.
+- Physical cancellation retest: blocked because installing the unchanged pre-fix APK would not test the correction.
+- Performance confirmation: still open; no profile candidate exists and previous timings came from the debug APK.
+- Physical API configuration: unresolved for the tablet. The current debug default is `https://10.0.2.2:7043`, which is emulator-only.
+- Sync UAT environment: `BLOCKED_BY_ENVIRONMENT`; no explicitly safe tablet-accessible backend/SQL Server environment was identified.
