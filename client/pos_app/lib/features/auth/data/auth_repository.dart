@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:pos_app/core/security/password_hasher.dart';
 import 'package:pos_app/core/storage/secure_token_store.dart';
 import 'package:pos_app/database/app_database.dart';
+import 'package:pos_app/features/auth/data/cloud_session_guard.dart';
 
 typedef TokenClearer = Future<void> Function();
 
@@ -14,7 +15,10 @@ final class LocalAuthSession {
 final class AuthRepository {
   AuthRepository(this._db, {PasswordHasher? hasher, TokenClearer? clearTokens})
     : _hasher = hasher ?? PasswordHasher(),
-      _clearTokens = clearTokens ?? const SecureTokenStore().clear;
+      _clearTokens =
+          clearTokens ??
+          (() =>
+              CloudSessionGuard.instance.clearTokens(const SecureTokenStore()));
   final AppDatabase _db;
   final PasswordHasher _hasher;
   final TokenClearer _clearTokens;
@@ -52,6 +56,7 @@ final class AuthRepository {
   }
 
   Future<void> logout() async {
+    CloudSessionGuard.instance.invalidate();
     final db = await _db.open();
     final now = DateTime.now().toUtc().toIso8601String();
 

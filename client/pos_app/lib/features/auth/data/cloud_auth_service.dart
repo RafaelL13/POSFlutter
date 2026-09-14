@@ -4,6 +4,7 @@ import 'package:pos_app/core/storage/secure_token_store.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:pos_app/sync/sync_repository.dart';
+import 'package:pos_app/features/auth/data/cloud_session_guard.dart';
 
 final class CloudAuthService {
   CloudAuthService(this._db, this._api, {SecureTokenStore? tokens})
@@ -37,7 +38,42 @@ final class CloudAuthService {
     }
   }
 
-  Future<void> tryLogin(String username, String password) async {
-    await login(username, password);
+  Future<void> tryLogin(
+    String username,
+    String password, {
+    String? expectedUserGlobalId,
+    int? sessionGeneration,
+  }) async {
+    if (expectedUserGlobalId == null || sessionGeneration == null) {
+      await login(username, password);
+      return;
+    }
+    try {
+      final ctx = await LocalAppContext.load(_db);
+      final j = await _api.post('/api/auth/login', {
+        'businessGlobalId': ctx.businessGlobalId,
+        'deviceGlobalId': ctx.deviceGlobalId,
+        'username': username,
+        'password': password,
+      }, authenticated: false);
+      final access = j['accessToken']?.toString();
+      final refresh = j['refreshToken']?.toString();
+      if (access == null || refresh == null) {
+        return;
+      }
+      final guard = CloudSessionGuard.instance;
+      final saved = await guard.saveTokensIfCurrent(
+        _db,
+        _tokens,
+        generation: sessionGeneration,
+        userGlobalId: expectedUserGlobalId,
+        accessToken: access,
+        refreshToken: refresh,
+      );
+      if (!saved) {
+        return;
+      }
+      await SyncRepository(database: _db).releaseAuthenticationRequired();
+    } catch (_) {}
   }
 }

@@ -2,6 +2,7 @@ import 'package:pos_app/core/context/local_app_context.dart';
 import 'package:pos_app/core/network/cloud_api_client.dart';
 import 'package:pos_app/core/storage/secure_token_store.dart';
 import 'package:pos_app/database/app_database.dart';
+import 'package:pos_app/features/auth/data/cloud_session_guard.dart';
 
 final class CloudBootstrapService {
   CloudBootstrapService(this._db, this._api, {SecureTokenStore? tokens})
@@ -9,7 +10,10 @@ final class CloudBootstrapService {
   final AppDatabase _db;
   final CloudApiClient _api;
   final SecureTokenStore _tokens;
-  Future<void> tryBootstrap() async {
+  Future<void> tryBootstrap({
+    String? expectedUserGlobalId,
+    int? sessionGeneration,
+  }) async {
     try {
       final ctx = await LocalAppContext.load(_db);
       if (!ctx.isAdministrator || ctx.isAdminReadOnly) return;
@@ -36,6 +40,17 @@ final class CloudBootstrapService {
       final access = j['accessToken']?.toString(),
           refresh = j['refreshToken']?.toString();
       if (access != null && refresh != null) {
+        if (expectedUserGlobalId != null && sessionGeneration != null) {
+          await CloudSessionGuard.instance.saveTokensIfCurrent(
+            _db,
+            _tokens,
+            generation: sessionGeneration,
+            userGlobalId: expectedUserGlobalId,
+            accessToken: access,
+            refreshToken: refresh,
+          );
+          return;
+        }
         await _tokens.save(accessToken: access, refreshToken: refresh);
       }
     } catch (_) {}

@@ -10,13 +10,24 @@ import 'package:pos_app/core/design/app_sizes.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
 import 'package:pos_app/features/auth/data/auth_repository.dart';
+import 'package:pos_app/features/auth/data/background_cloud_login_coordinator.dart';
 import 'package:pos_app/features/auth/data/cloud_auth_service.dart';
-import 'package:pos_app/features/auth/data/cloud_bootstrap_service.dart';
 import 'package:pos_app/features/branding/presentation/brand_logo.dart';
 import 'package:pos_app/features/branding/presentation/branding_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({
+    this.localLogin,
+    this.startBackgroundCloudLogin,
+    this.loadAuthorizedHome,
+    this.navigateTo,
+    super.key,
+  });
+
+  final Future<LocalAuthSession?> Function(String, String)? localLogin;
+  final void Function(String, String, String)? startBackgroundCloudLogin;
+  final Future<String> Function()? loadAuthorizedHome;
+  final void Function(BuildContext, String)? navigateTo;
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
@@ -183,7 +194,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
         return;
       }
-      final session = await AuthRepository(appDatabase).login(_u.text, _p.text);
+      final session =
+          await (widget.localLogin ?? AuthRepository(appDatabase).login)(
+            _u.text,
+            _p.text,
+          );
       if (session == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -192,18 +207,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
         return;
       }
-      await CloudBootstrapService(appDatabase, cloudApiClient).tryBootstrap();
-      await CloudAuthService(
-        appDatabase,
-        cloudApiClient,
-      ).tryLogin(_u.text, _p.text);
+      final startCloud =
+          widget.startBackgroundCloudLogin ??
+          (String username, String password, String userGlobalId) {
+            BackgroundCloudLoginCoordinator(appDatabase, cloudApiClient).start(
+              username: username,
+              password: password,
+              userGlobalId: userGlobalId,
+            );
+          };
+      startCloud(_u.text, _p.text, session.userGlobalId);
       if (!mounted) {
         return;
       }
       ref.invalidate(effectiveCapabilitiesProvider);
-      final access = await RouteAccessService(appDatabase).load();
+      final destination =
+          await widget.loadAuthorizedHome?.call() ??
+          RouteAuthorization.authorizedHome(
+            (await RouteAccessService(appDatabase).load()).capabilities,
+          );
       if (mounted) {
-        context.go(RouteAuthorization.authorizedHome(access.capabilities));
+        final navigate = widget.navigateTo;
+        if (navigate == null) {
+          context.go(destination);
+        } else {
+          navigate(context, destination);
+        }
       }
     } finally {
       if (mounted) {
