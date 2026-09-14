@@ -11,7 +11,7 @@ Evidence directory: `uat_artifacts/20260913_191150`
 
 This is a partial but substantial physical-tablet UAT run against the exact candidate above. Core offline operations exercised in this run persisted correctly: local login/session, Seller purchase, FIFO lot creation, cash opening, five payment scenarios, invalid payment guards, cancellation, cash reconciliation, and force-stop/relaunch recovery.
 
-The candidate is **not production-ready**. A reproducible unhandled Flutter exception occurs after a successful sale cancellation, and cold startup is consistently slow (8.3-10.2 seconds by Android instrumentation). Several required scenarios remain unexecuted, including a physical 6-to-7 upgrade, direct protected-route penetration checks, complete branding editing, manual cash movements, expenses, surplus/shortage closures, and safe online synchronization.
+The original candidate is **not production-ready**. Its reproducible post-cancellation Flutter exception was corrected in F1 and the corrected APK passed the physical cancellation retest documented below. Cold startup remains consistently slow (8.3-10.2 seconds by Android instrumentation), and several required scenarios remain unexecuted, including a physical 6-to-7 upgrade, direct protected-route penetration checks, complete branding editing, manual cash movements, expenses, surplus/shortage closures, and safe online synchronization.
 
 No crash, ANR, SQLite exception, database integrity failure, or confirmed data loss was observed.
 
@@ -40,6 +40,7 @@ No crash, ANR, SQLite exception, database integrity failure, or confirmed data l
 | Mixed overpayment | Yes | PASS | `38_invalid_mixed_over.png`, `invalid_mixed_over.xml` | immediate | — | Assigned $250, exceeds $125; charge button disabled with clear error. |
 | Quantity over stock | Yes | PASS | `39_overstock_attempt.png`, `overstock_attempt.xml` | immediate | — | Quantity capped at 46 with clear validation message; no sale committed. |
 | Sale cancellation with authorization | Yes | PASS_WITH_EXCEPTION | `40_cancel_auth_filled.png`, `42_cancel_success.png`, final logcat | approximately 25 s | P1 | Sale retained as Cancelled; special authorization recorded. Flutter emitted an unhandled `setState` Future exception afterward. |
+| F1 physical cancellation retest | Yes | PASS | `49_f1_sale_created.png`, `53_f1_after_local_authorization.png`, `f1_cancel_retest_logcat.txt`; SQLite before/after queries | n/a | — | Fixed APK refreshed the row to `Cancelled`; stock 45 -> 46, FIFO lot availability 44 -> 45, and cash reversal -$125.00 were verified. No targeted Flutter, layout, SQLite, fatal, crash, or ANR signature occurred. |
 | Cancellation inventory/FIFO restitution | Yes | PASS | SQLite query; `44_offline_restart_persistence.png` | n/a | — | Stock restored 45 -> 46; payment and lot allocation history retained. |
 | Cancellation cash reversal | Yes | PASS_WITH_DISPLAY_ISSUE | `43_cash_after_cancel.png`; SQLite cash movements | n/a | P2 | Expected cash 675 -> 625 and a -$50 cancellation movement exists. “Ventas en efectivo” still displays gross $175, which is potentially confusing. |
 | Exact cash close | Yes | PASS | `close_cash_exact_diff.xml`, `45_cash_closed_exact.png` | approximately 25 s | P1 | $625 expected and counted; UI reported “Caja cuadrada”; session closed. |
@@ -97,7 +98,7 @@ At 1920x1080 landscape with the keyboard open, no RenderFlex overflow was logged
 - ANRs: 0 confirmed.
 - RenderFlex overflows: 0 observed/logged.
 - SQLite/Database exceptions: 0 observed/logged.
-- Unhandled Flutter exceptions: 1, attributable to the cancellation reload defect above.
+- Unhandled Flutter exceptions: 1 in the original APK, attributable to the cancellation reload defect above; 0 in the clean-logcat F1 physical retest.
 - `gfxinfo`: 4 frames rendered, 2 janky (50%). This sample is too small to generalize; one 700 ms frame was recorded.
 - Final memory snapshot: total PSS 321479 KB, total RSS 362152 KB, swap PSS 50116 KB. This is a single observation and does not establish a leak.
 
@@ -143,7 +144,7 @@ The score is provisional because several mandatory scenarios are not executed. I
 
 Must fix before production:
 
-1. Correct and regression-test the async `setState` cancellation reload defect.
+1. F1 completed: the async `setState` cancellation reload defect was corrected, regression-tested, and physically retested successfully.
 2. Profile and reduce cold start and local transaction/login latency.
 3. Run remaining security route/repository checks on the physical candidate.
 4. Validate the actual 6-to-7 device migration on a preserved version-6 dataset.
@@ -167,8 +168,8 @@ Remaining UAT before a pilot decision:
 ## Decision
 
 - Production ready: **NO**.
-- Pilot ready: **NO, pending P1 cancellation fix and completion of the blocked/unexecuted gates**.
-- Recommended next action: fix only P1-01 in a small reviewed change with a focused cancellation widget test, rerun Flutter gates, rebuild the candidate, and resume the remaining physical UAT against an explicitly safe sync environment.
+- Pilot ready: **NO, pending completion of the remaining blocked/unexecuted gates**.
+- Recommended next action: continue the remaining physical UAT and use an explicitly safe sync environment before reconnecting.
 
 ## FASE F1 correction history
 
@@ -197,8 +198,41 @@ Candidate build result after the commit:
 
 - Debug APK: `BLOCKED_BY_ENVIRONMENT`. Three executions (direct Flutter, `cmd.exe`, and redirected `cmd.exe`) failed with `java.io.IOException: Unable to establish loopback connection` during `assembleDebug`.
 - Profile APK: `BLOCKED_BY_ENVIRONMENT` with the same loopback failure during `assembleProfile`.
-- New APK SHA-256: unavailable because no new APK was produced.
-- Physical cancellation retest: blocked because installing the unchanged pre-fix APK would not test the correction.
+- New APK SHA-256: unavailable in the sandbox build attempt described above. A corrected APK was subsequently generated outside the sandbox and installed manually with application data preserved.
+- Physical cancellation retest: PASS; see the evidence below.
 - Performance confirmation: still open; no profile candidate exists and previous timings came from the debug APK.
 - Physical API configuration: unresolved for the tablet. The current debug default is `https://10.0.2.2:7043`, which is emulator-only.
 - Sync UAT environment: `BLOCKED_BY_ENVIRONMENT`; no explicitly safe tablet-accessible backend/SQL Server environment was identified.
+
+## FASE F1 physical cancellation retest
+
+Retest candidate:
+
+- HEAD: `d3e7c0618475025e31e414af0846892745106102`.
+- Correction commit: `718e0bf` (`fix(sales): avoid async setState after cancellation`).
+- Device: `JK132110000931`.
+- `OLD_APK_SHA256=271296DE816EA3B70A2DAA0BABA17A8FA9B5346DA869273761CAD6A0B610C196`.
+- `FIXED_APK_SHA256=01EC8330BA67F3FDE687D39360AF2079D1EFFBB118C1F268642401DC0B890DC7`.
+- Installation was performed manually with `adb install -r`; existing application data and the prior UAT state were preserved.
+
+Physical procedure and evidence:
+
+- Logcat was cleared immediately before the final special-authorization action.
+- A new offline Cash sale, folio `V-1789358051265`, was recorded for $125.00 against the existing FIFO-controlled product.
+- The pre-cancellation SQLite snapshot recorded sale status `Confirmed`, total 12500 cents, FIFO cost 11500 cents, Cash payment 12500 cents, older-lot availability 44, aggregate stock 45, and a +12500-cent Sale cash movement.
+- A responsible user authorized cancellation locally on the tablet; no password was captured or recorded.
+- The sales UI reloaded and immediately displayed the target folio as `Cancelled` in `53_f1_after_local_authorization.png`.
+- The post-cancellation SQLite snapshot passed `PRAGMA integrity_check=ok`, retained the sale payment and FIFO allocation history, restored the older lot from 44 to 45, restored aggregate stock from 45 to 46, and added a -12500-cent Cancellation cash movement referencing the same sale global ID.
+- `f1_cancel_retest_logcat.txt` contained zero matches for `FlutterError`, `setState`, `callback argument returned a Future`, `Unhandled Exception`, `RenderFlex`, `SQLiteException`, `FATAL EXCEPTION`, and `ANR in com.posflutter`.
+
+Retest result:
+
+- `PHYSICAL_CANCEL_RETEST=PASS`.
+- `UI_REFRESH_AFTER_CANCEL=PASS`.
+- `SALE_CANCEL=PASS`.
+- `FIFO_RESTITUTION=PASS`.
+- `CASH_REVERSAL=PASS`.
+- `UNHANDLED_EXCEPTION_AFTER_CANCEL=0`.
+- `CRASHES=0`.
+- `ANRS=0`.
+- `CANCELLATION_P1_STATUS=CLOSED`.
