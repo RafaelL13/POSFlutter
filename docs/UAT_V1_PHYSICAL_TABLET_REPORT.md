@@ -236,3 +236,55 @@ Retest result:
 - `CRASHES=0`.
 - `ANRS=0`.
 - `CANCELLATION_P1_STATUS=CLOSED`.
+
+## FASE F profile performance UAT
+
+Profile candidate and method:
+
+- `PROFILE_HEAD=04732cc43d7faee267d6641b62729e1d3f2e7eac`.
+- `PROFILE_APK_SHA256=24935112121A3F1025B9A214DCD7541650DFA4C0983C9E7035F507E53FB4D8F8`.
+- Device: `JK132110000931`.
+- The installed package APK was read back from the device and hashed without reinstalling or clearing application data.
+- Timed UI polling used screenshots and did not introduce `Start-Sleep` inside measured intervals. Screenshot capture itself has a measured median overhead of 975 ms, so UI-operation figures below are conservative end-to-end observations rather than profiler-exclusive method durations.
+- Invalid attempts made from the launcher or without a completed credential submission were excluded from the login sample.
+
+Measured results:
+
+| Operation | Samples (ms) | Median/result |
+| --- | --- | --- |
+| Profile cold start | 2540, 2476, 2409, 2420, 2476 | `2476 ms` |
+| Login to visible dashboard | 9885, 10704, 10622 | `10622 ms` |
+| Dashboard open | 2189, 2143, 2092 | `2143 ms` |
+| POS open | 2708, 2582, 2510 | `2582 ms` |
+| Product search | 2322, 2234, 2340 | `2322 ms` |
+| Cash sale commit | 2146, 2084, 2156 | `2146 ms` |
+| Purchase commit | 2161 | `2161 ms`; one valid repetition completed |
+
+The three valid POS render-span samples were 1574.1, 1401.3 and 1378.7 ms (median 1401.3 ms). They support the screenshot-based observation while excluding screenshot acquisition overhead. The purchase operation was not repeated merely to manufacture additional business records; its single valid run confirmed persistence and return to the purchase list.
+
+Android graphics and memory snapshot after the exercised flows:
+
+- Frames rendered: 6000; janky frames: 389 (`6.48%`).
+- Frame percentiles: p50 7 ms, p90 13 ms, p95 21 ms, p99 69 ms.
+- Total PSS: 155951 KB; total RSS: 224920 KB; total swap PSS: 14368 KB.
+- Java heap PSS: 9256 KB; native heap PSS: 47760 KB.
+
+Diagnosis:
+
+- Profile cold start improved substantially relative to the earlier debug observation, but login remains consistently near 10.6 seconds and therefore reproduces the performance defect outside debug instrumentation.
+- After successful local authentication, `LoginScreen._login` synchronously awaits `CloudBootstrapService.tryBootstrap()` and `CloudAuthService.tryLogin()` before navigating to the local dashboard. The cloud API timeout is 20 seconds. This places optional network work on the critical path of an otherwise valid offline login and is the strongest code-supported explanation for the measured delay.
+- Dashboard and POS repositories load from local SQLite. No direct HTTP dependency was found in their primary load paths. Branding is also loaded locally, with the stored logo size bounded; it is not the leading explanation based on the inspected paths.
+- No optimization or functional code change was made during this UAT. The recommended correction is to allow successful local authentication and navigation without awaiting cloud availability, then perform cloud bootstrap/authentication asynchronously with safe state and diagnostic handling.
+- The retained logcat contains 22 `FATAL EXCEPTION` markers from failed `uid=2000(shell)` UIAutomator dump processes (`UiAutomationService ... already registered`). None names the POSFlutter package process, and there were zero matches for `Process: com.posflutter`, `ANR in com.posflutter`, `FlutterError`, `Unhandled Exception`, `SQLiteException`, or `RenderFlex`; these instrumentation failures are not classified as application crashes.
+
+Performance result:
+
+- `LOGIN_MEDIAN_MS=10622`.
+- `DASHBOARD_OPEN_MS=2143`.
+- `POS_OPEN_MS=2582`.
+- `PRODUCT_SEARCH_MS=2322`.
+- `SALE_COMMIT_MS=2146`.
+- `PURCHASE_COMMIT_MS=2161`.
+- `PERFORMANCE_P1_STATUS=CONFIRMED`.
+- `P2-CASH_KPI_SEMANTICS=OPEN`.
+- `P2-LOGIN_KEYBOARD_REACHABILITY=OPEN`.
