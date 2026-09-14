@@ -9,8 +9,19 @@ import 'package:pos_app/features/sales/data/sales_read_repository.dart';
 import 'package:pos_app/features/sales/data/sales_repository.dart';
 import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 
+typedef SalesLoader = Future<List<Map<String, Object?>>> Function();
+typedef SaleCancellationRunner = Future<bool> Function(
+  BuildContext context,
+  Map<String, Object?> sale,
+  String reason,
+);
+
 class SalesScreen extends StatefulWidget {
-  const SalesScreen({super.key});
+  const SalesScreen({super.key, this.loader, this.cancellationRunner});
+
+  final SalesLoader? loader;
+  final SaleCancellationRunner? cancellationRunner;
+
   @override
   State<SalesScreen> createState() => _SalesScreenState();
 }
@@ -19,8 +30,12 @@ class _SalesScreenState extends State<SalesScreen> {
   late Future<List<Map<String, Object?>>> _future = _load();
   bool _cancelling = false;
   Future<List<Map<String, Object?>>> _load() =>
-      SalesReadRepository(appDatabase).list();
-  void _reload() => setState(() => _future = _load());
+      widget.loader?.call() ?? SalesReadRepository(appDatabase).list();
+  void _reload() {
+    setState(() {
+      _future = _load();
+    });
+  }
 
   @override
   Widget build(BuildContext context) => AppPage(
@@ -114,17 +129,23 @@ class _SalesScreenState extends State<SalesScreen> {
         builder: (_) => _SaleCancellationDialog(sales: available),
       );
       if (request == null || !mounted) return;
-      final completed = await runWithSpecialAuthorization(
-        context: context,
-        capability: Capability.saleCancel,
-        operationLabel: 'Cancelar venta',
-        reason: request.reason,
-        operation: (grant) => SalesRepository(appDatabase).cancel(
-          request.sale['global_id']! as String,
-          request.reason,
-          authorizationGrant: grant,
-        ),
-      );
+      final runner = widget.cancellationRunner;
+      final bool completed;
+      if (runner != null) {
+        completed = await runner(context, request.sale, request.reason);
+      } else {
+        completed = await runWithSpecialAuthorization(
+          context: context,
+          capability: Capability.saleCancel,
+          operationLabel: 'Cancelar venta',
+          reason: request.reason,
+          operation: (grant) => SalesRepository(appDatabase).cancel(
+            request.sale['global_id']! as String,
+            request.reason,
+            authorizationGrant: grant,
+          ),
+        );
+      }
       if (completed && mounted) _reload();
     } finally {
       if (mounted) setState(() => _cancelling = false);
