@@ -123,9 +123,19 @@ class _CashScreenState extends State<CashScreen> {
         Icons.flag_outlined,
       ),
       (
-        'Ventas en efectivo',
+        'Ventas brutas en efectivo',
         formatMoney(s.cashSalesCents),
         Icons.payments_outlined,
+      ),
+      (
+        'Cancelaciones en efectivo',
+        formatMoney(s.cashCancellationsCents),
+        Icons.undo_outlined,
+      ),
+      (
+        'Ventas netas en efectivo',
+        formatMoney(s.netCashSalesCents),
+        Icons.calculate_outlined,
       ),
       (
         'Gastos en efectivo',

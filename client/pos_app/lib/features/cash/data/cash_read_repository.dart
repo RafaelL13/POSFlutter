@@ -65,6 +65,8 @@ final class CashSessionSummary {
   final CashPaymentSummary paymentSummary;
   final int saleCount;
   final List<CashMovementSummary> movements;
+
+  int get netCashSalesCents => cashSalesCents - cashCancellationsCents;
 }
 
 final class CashReadRepository {

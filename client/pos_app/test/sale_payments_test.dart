@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
+import 'package:pos_app/features/cash/data/cash_read_repository.dart';
 import 'package:pos_app/features/cash/data/cash_repository.dart';
 import 'package:pos_app/features/payments/domain/sale_payment.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
@@ -192,6 +193,13 @@ void main() {
       ],
       receivedCents: 50,
     );
+    final beforeCancellation = await CashReadRepository(fixture.database)
+        .currentSummary();
+    expect(beforeCancellation!.cashSalesCents, 30);
+    expect(beforeCancellation.cashCancellationsCents, 0);
+    expect(beforeCancellation.netCashSalesCents, 30);
+    expect(beforeCancellation.expectedCashCents, 30);
+
     await SalesRepository(fixture.database).cancel(sale.globalId, 'Error');
     final db = await fixture.database.open();
     expect(await _count(db, 'sale_payments'), 2);
@@ -203,6 +211,13 @@ void main() {
     );
     expect(movements.map((row) => row['amount_cents']), [30, -30]);
     expect((await db.query('inventory_lots')).single['available_quantity'], 5);
+
+    final afterCancellation = await CashReadRepository(fixture.database)
+        .currentSummary();
+    expect(afterCancellation!.cashSalesCents, 30);
+    expect(afterCancellation.cashCancellationsCents, 30);
+    expect(afterCancellation.netCashSalesCents, 0);
+    expect(afterCancellation.expectedCashCents, 0);
   });
 }
 

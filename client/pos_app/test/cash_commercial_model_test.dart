@@ -263,6 +263,7 @@ void main() {
     expect(summary.cashSalesCents, 3000);
     expect(summary.cashExpensesCents, 500);
     expect(summary.cashCancellationsCents, 300);
+    expect(summary.netCashSalesCents, 2700);
     expect(summary.manualInCents, 1000);
     expect(summary.manualOutCents, 700);
     expect(summary.expectedCashCents, 12500);
