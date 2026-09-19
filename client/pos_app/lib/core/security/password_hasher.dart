@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:cryptography_flutter/cryptography_flutter.dart';
 
 final class PasswordHash {
   const PasswordHash(this.hash, this.salt);
@@ -10,20 +12,32 @@ final class PasswordHash {
 }
 
 final class PasswordHasher {
-  PasswordHasher()
-    : _algorithm = Pbkdf2(
-        macAlgorithm: Hmac.sha256(),
-        iterations: 210000,
-        bits: 256,
-      );
+  PasswordHasher() : _algorithm = _defaultAlgorithm();
+
+  static Pbkdf2 _defaultAlgorithm() {
+    final fallback = Pbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: 210000,
+      bits: 256,
+    );
+    if (!Platform.isAndroid) {
+      return fallback;
+    }
+    return FlutterPbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: 210000,
+      bits: 256,
+      fallback: fallback,
+    );
+  }
 
   final Pbkdf2 _algorithm;
 
   Future<PasswordHash> hash(String password) async {
     final random = Random.secure();
     final salt = List<int>.generate(16, (_) => random.nextInt(256));
-    final key = await _algorithm.deriveKey(
-      secretKey: SecretKey(utf8.encode(password)),
+    final key = await _algorithm.deriveKeyFromPassword(
+      password: password,
       nonce: salt,
     );
     return PasswordHash(
@@ -38,8 +52,8 @@ final class PasswordHasher {
     String encodedSalt,
   ) async {
     final salt = base64Decode(encodedSalt);
-    final key = await _algorithm.deriveKey(
-      secretKey: SecretKey(utf8.encode(password)),
+    final key = await _algorithm.deriveKeyFromPassword(
+      password: password,
       nonce: salt,
     );
     final candidate = await key.extractBytes();
