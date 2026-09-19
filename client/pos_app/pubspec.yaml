@@ -15,16 +15,16 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.5
   uuid: ^4.6.0
-  cryptography: ^2.9.0
-  cryptography_flutter: ^2.3.4
   flutter_secure_storage: ^11.0.0
   connectivity_plus: ^7.3.1
   http: ^1.6.0
   intl: ^0.20.2
   image_picker: ^1.2.3
   package_info_plus: ^10.2.1
+  webcrypto: 0.6.1
 
 dev_dependencies:
+  cryptography: ^2.9.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
@@ -32,3 +32,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+dependency_overrides:
+  # webcrypto 0.6.1 resolves native_toolchain_cmake 0.2.x by default;
+  # 0.2.7 fails Android native-assets CMake toolchain discovery with Flutter 3.47.1.
+  # 0.3.2 is required by the validated Android Profile build.
+  native_toolchain_cmake: 0.3.2
