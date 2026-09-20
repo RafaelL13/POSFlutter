@@ -47,26 +47,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final branding = resolvedBranding(ref.watch(businessBrandingProvider));
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
             const pagePadding = AppSpacing.md;
-            final availableHeight =
-                constraints.maxHeight - keyboardHeight - (pagePadding * 2);
+            final minHeight = constraints.maxHeight > pagePadding * 2
+                ? constraints.maxHeight - (pagePadding * 2)
+                : 0.0;
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(
-                pagePadding,
-                pagePadding,
-                pagePadding,
-                pagePadding + keyboardHeight,
-              ),
+              padding: const EdgeInsets.all(pagePadding),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: availableHeight > 0 ? availableHeight : 0,
-                ),
+                constraints: BoxConstraints(minHeight: minHeight),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(
@@ -184,9 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           }
           return;
         }
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ref.invalidate(effectiveCapabilitiesProvider);
         final access = await RouteAccessService(appDatabase).load();
         if (mounted) {
@@ -217,9 +208,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             );
           };
       startCloud(_u.text, _p.text, session.userGlobalId);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ref.invalidate(effectiveCapabilitiesProvider);
       final destination =
           await widget.loadAuthorizedHome?.call() ??
@@ -235,9 +224,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       }
     } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 }

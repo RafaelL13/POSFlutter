@@ -100,7 +100,7 @@ void main() {
             ),
           ),
         );
-        await tester.tap(find.widgetWithText(TextFormField, 'Usuario *'));
+        await tester.tap(find.widgetWithText(TextFormField, 'Contraseña *'));
         await tester.pump();
 
         expect(find.text('POS Flutter'), findsOneWidget);
@@ -109,8 +109,20 @@ void main() {
         expect(find.text('Contraseña *'), findsOneWidget);
         expect(find.text('Iniciar sesión'), findsOneWidget);
         expect(tester.testTextInput.isVisible, isTrue);
-        await tester.ensureVisible(find.text('Iniciar sesión'));
+        expect(tester.takeException(), isNull);
+
+        final button = find.text('Iniciar sesión');
+        final scrollable = find.byType(Scrollable).first;
+        final keyboardViewportHeight = viewport.height - 360;
+
+        await tester.scrollUntilVisible(button, 120, scrollable: scrollable);
         await tester.pump();
+
+        expect(button, findsOneWidget);
+        expect(
+          tester.getRect(button).bottom,
+          lessThanOrEqualTo(keyboardViewportHeight),
+        );
         expect(tester.takeException(), isNull);
       },
     );
