@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/context/local_app_context.dart';
 import 'package:pos_app/core/design/app_theme.dart';
@@ -203,22 +204,61 @@ void main() {
     expect(find.textContaining('Sin conexión'), findsWidgets);
   });
 
-  testWidgets('leaving with cart asks for confirmation', (tester) async {
+  testWidgets('Android back from an empty cart returns to Dashboard', (
+    tester,
+  ) async {
     final controller = await _controller();
-    controller.addProduct(controller.visibleProducts.first);
+    final router = _posRouter(controller);
+    addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: PosScreen(controller: controller, syncSummary: _sync),
-        ),
+        child: MaterialApp.router(theme: AppTheme.light, routerConfig: router),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
+
     await tester.binding.handlePopRoute();
-    await tester.pump();
-    expect(find.text('Descartar venta actual'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dashboard de prueba'), findsOneWidget);
+    expect(controller.lines, isEmpty);
   });
+
+  testWidgets(
+    'Android back protects a non-empty cart until discard is confirmed',
+    (tester) async {
+      final controller = await _controller();
+      controller.addProduct(controller.visibleProducts.first);
+      final router = _posRouter(controller);
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp.router(
+            theme: AppTheme.light,
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Descartar venta actual'), findsOneWidget);
+      expect(controller.lines, hasLength(1));
+
+      await tester.tap(find.text('Continuar venta'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pos-checkout')), findsOneWidget);
+      expect(controller.lines, hasLength(1));
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dashboard de prueba'), findsOneWidget);
+      expect(controller.lines, isEmpty);
+    },
+  );
 }
 
 const _sync = SyncSummary(
@@ -228,6 +268,20 @@ const _sync = SyncSummary(
   conflictCount: 0,
   isOnline: false,
   isSyncing: false,
+);
+
+GoRouter _posRouter(PosController controller) => GoRouter(
+  initialLocation: '/pos',
+  routes: [
+    GoRoute(
+      path: '/dashboard',
+      builder: (_, _) => const Scaffold(body: Text('Dashboard de prueba')),
+    ),
+    GoRoute(
+      path: '/pos',
+      builder: (_, _) => PosScreen(controller: controller, syncSummary: _sync),
+    ),
+  ],
 );
 
 Future<PosController> _controller({

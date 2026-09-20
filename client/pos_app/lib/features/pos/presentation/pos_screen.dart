@@ -56,11 +56,12 @@ class _PosScreenState extends State<PosScreen> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: controller.lines.isEmpty,
-    onPopInvokedWithResult: (didPop, _) async {
-      if (!didPop && await _confirmDiscard()) {
-        if (context.mounted) context.pop();
-      }
+    // Dashboard opens POS with `go('/pos')`, so this route has no previous
+    // page to pop back to. Always handle Android back explicitly instead of
+    // allowing the root navigator to close the activity.
+    canPop: false,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _handleBackNavigation();
     },
     child: Scaffold(
       appBar: AppBar(
@@ -259,6 +260,19 @@ class _PosScreenState extends State<PosScreen> {
         ),
       ) ??
       false;
+
+  Future<void> _handleBackNavigation() async {
+    if (controller.lines.isEmpty) {
+      if (mounted) context.go('/dashboard');
+
+      return;
+    }
+    if (await _confirmDiscard()) {
+      controller.clear();
+      if (mounted) context.go('/dashboard');
+    }
+  }
+
   Future<void> _clearCart() async {
     if (await _confirmDiscard()) controller.clear();
   }
