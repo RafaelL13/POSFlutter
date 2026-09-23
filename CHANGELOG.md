@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased - 2026-09-23
+### Automatic offline queue synchronization
+
+- Added best-effort automatic synchronization at application startup, application resume, connectivity recovery, and a periodic fallback interval.
+- Concurrent synchronization requests are coalesced into one active synchronization.
+- Push synchronization now drains all eligible SyncQueue batches instead of stopping after the first batch.
+- A failed push batch preserves the existing retry/backoff behavior and does not block local POS operation.
+- Physical Android validation confirmed an offline Cash sale remained fully local while Wi-Fi was disabled and synchronized automatically after connectivity returned without pressing the manual Sync action.
 
 - Cerrado UAT fisico offline y Sync E2E tablet -> API ASP.NET Core -> SQL Server.
 - Agregada reparacion segura de cola para primer sync de Business/User.

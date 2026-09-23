@@ -15,7 +15,25 @@ final class SyncService {
   final AppDatabase _database;
   final SyncRepository _local;
   final RemoteSyncRepository _remote;
-  Future<void> synchronize() async {
+  Future<void>? _activeSynchronization;
+
+  Future<void> synchronize() {
+    final active = _activeSynchronization;
+    if (active != null) {
+      return active;
+    }
+
+    final synchronization = _synchronize();
+    _activeSynchronization = synchronization;
+
+    return synchronization.whenComplete(() {
+      if (identical(_activeSynchronization, synchronization)) {
+        _activeSynchronization = null;
+      }
+    });
+  }
+
+  Future<void> _synchronize() async {
     final connectivity = await Connectivity().checkConnectivity();
     if (connectivity.every((e) => e == ConnectivityResult.none)) {
       await _local.recordPullFailure(
@@ -28,14 +46,22 @@ final class SyncService {
       );
       return;
     }
+
     final authorization = await AuthorizationService(_database)
         .require(Capability.syncPull);
+
     if (authorization.can(Capability.syncPush)) {
       await _local.recoverInterrupted();
       await _local.repairFirstSyncQueue();
-      final batch = await _local.nextBatch();
-      if (batch.isNotEmpty) {
+
+      while (true) {
+        final batch = await _local.nextBatch();
+        if (batch.isEmpty) {
+          break;
+        }
+
         await _local.markSyncing(batch);
+
         try {
           await _local.applyResults(await _remote.push(batch));
         } on Object catch (error) {
@@ -43,9 +69,14 @@ final class SyncService {
             batch,
             SyncFailure.fromException(error),
           );
+
+          // Do not retry a failed batch continuously in the same run.
+          // SyncRepository owns the retry/backoff policy.
+          break;
         }
       }
     }
+
     try {
       var more = true;
       while (more) {

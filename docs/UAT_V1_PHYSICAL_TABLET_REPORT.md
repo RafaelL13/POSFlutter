@@ -383,3 +383,36 @@ Result:
 - `FIFO_REMOTE_INTEGRITY=PASS`.
 - `REMOTE_CANCELLATION_RESTITUTION=PASS`.
 - `SYNC_E2E_STATUS=CLOSED`.
+
+## AUTO-SYNC E2E - cierre fisico
+
+Fecha de validacion: 2026-09-23
+
+Resultado: **PASS**
+
+Se valido en tablet Android fisica el flujo completo offline-to-server sin utilizar la accion manual de sincronizacion:
+
+- Wi-Fi deshabilitado antes de la operacion.
+- Apertura de caja creada offline.
+- Venta Cash local por 125.00 MXN.
+- Venta local GlobalId:  1a0ccd0-38d4-77f1-aedb-278e8ba1ce03.
+- Operacion SyncQueue de venta:  1a0ccd0-3963-7bf0-80d2-6528a028cd2f.
+- SQLite local confirmo venta Confirmed, pago Cash 12500 cents, cambio 0, costo FIFO 11500 cents y utilidad bruta 1000 cents.
+- Asignacion FIFO: cantidad 1 desde inventory lot 1.
+- Inventario local confirmado de 42 a 41 unidades.
+- Antes de recuperar conectividad existian exactamente dos operaciones pendientes: CashSession Create y Sale Create.
+- Se habilito exclusivamente Wi-Fi; no se presiono Sync manual.
+- En el primer polling ambas operaciones estaban Synced, retry_count 0, sin error y unresolved 0.
+- SQL Server central confirmo exactamente una venta con el mismo GlobalId.
+- InboundOperations confirmo exactamente una operacion con el mismo OperationGlobalId.
+- Integridad transaccional central confirmada: TotalCents 12500, FifoCostCents 11500, GrossProfitCents 1000, Cash, Confirmed, una linea, cantidad vendida 1, un pago por 12500 cents, una asignacion FIFO y cantidad asignada 1.
+
+Cierre:
+
+PHYSICAL_AUTO_SYNC_CLIENT=PASS
+
+AUTO_SYNC_E2E_CENTRAL=PASS
+
+MANUAL_SYNC_EXECUTED=False
+
+La venta local permanece independiente de Internet. La recuperacion de conectividad dispara sincronizacion best-effort sin convertir la nube en requisito para vender.
