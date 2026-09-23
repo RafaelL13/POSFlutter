@@ -41,7 +41,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         {
             try
             {
-                EnsureOperationAuthorized(operation, tenant);
+                await EnsureOperationAuthorizedAsync(operation, tenant, cancellationToken);
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -961,7 +961,22 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         SyncTenantContext tenant,
         CancellationToken cancellationToken)
     {
-        if (tenant.Role != "Supervisor" || payload.Type != "ManualOut")
+        if (payload.Type != "ManualOut")
+            return;
+
+        var actorRole = await _db.Users.AsNoTracking()
+            .Where(x =>
+                x.BusinessId == tenant.BusinessId &&
+                x.GlobalId == payload.UserGlobalId &&
+                x.Active)
+            .Select(x => x.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (actorRole is null)
+            throw new CashMovementAuthorizationException(
+                "Cash movement actor is not an active user of the authenticated business.");
+
+        if (actorRole != "Supervisor")
             return;
 
         if (payload.Authorization is not { } authorization ||
@@ -985,8 +1000,8 @@ public sealed class SyncService(PosDbContext db) : ISyncService
 
         if (capability != "cashWithdrawal" ||
             requirement != "SecondUserAuthorization" ||
-            performedBy != tenant.UserGlobalId ||
-            authorizedBy == tenant.UserGlobalId ||
+            performedBy != payload.UserGlobalId ||
+            authorizedBy == payload.UserGlobalId ||
             businessGlobalId != tenant.BusinessGlobalId ||
             deviceGlobalId != tenant.DeviceGlobalId ||
             entityType != "CashMovement" ||
@@ -1059,7 +1074,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         var paymentPayloads = payload.Payments is { Count: > 0 }
             ? payload.Payments
             : payload.PaymentMethod is "Cash" or "Card" or "Transfer"
-                ? [new SalePaymentSyncPayload(payload.GlobalId,payload.PaymentMethod,payload.TotalCents)]
+                ? [new SalePaymentSyncPayload(payload.GlobalId, payload.PaymentMethod, payload.TotalCents)]
                 : throw new ArgumentException("Legacy sale payment method is invalid.");
         if (paymentPayloads.Any(x => x.AmountCents <= 0 || x.Method is not ("Cash" or "Card" or "Transfer")))
             throw new ArgumentException("Invalid sale payment.");
@@ -1129,18 +1144,20 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             var previousStock = await _db.InventoryLots.AsNoTracking()
                 .Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId && x.ProductGlobalId == linePayload.ProductGlobalId && x.Active)
                 .SumAsync(x => (int?)x.AvailableQuantity, cancellationToken) ?? 0;
+
             foreach (var lotPayload in linePayload.Lots)
             {
-                if (!consumedLotIds.Add(lotPayload.LotGlobalId))
+                var inventoryLotGlobalId = ResolveInventoryLotGlobalId(lotPayload);
+                if (!consumedLotIds.Add(inventoryLotGlobalId))
                     throw new ArgumentException("The same inventory lot cannot be consumed twice in one sale payload.");
                 var inventoryLot = await _db.InventoryLots.SingleOrDefaultAsync(
-                    x => x.BusinessId == tenant.BusinessId && x.GlobalId == lotPayload.LotGlobalId,
+                    x => x.BusinessId == tenant.BusinessId && x.GlobalId == inventoryLotGlobalId,
                     cancellationToken)
-                    ?? throw new InvalidOperationException($"Inventory lot {lotPayload.LotGlobalId} has not been synchronized yet.");
+                    ?? throw new InvalidOperationException($"Inventory lot {inventoryLotGlobalId} has not been synchronized yet.");
                 if (inventoryLot.BranchId != tenant.BranchId || inventoryLot.ProductGlobalId != linePayload.ProductGlobalId)
                     throw new ArgumentException("FIFO allocation references a lot from another branch or product.");
                 if (!inventoryLot.Active || inventoryLot.AvailableQuantity < lotPayload.Quantity)
-                    throw new InvalidOperationException($"Inventory lot {lotPayload.LotGlobalId} no longer has enough stock.");
+                    throw new InvalidOperationException($"Inventory lot {inventoryLotGlobalId} no longer has enough stock.");
                 if (inventoryLot.UnitCostCents != lotPayload.UnitCostCents)
                     throw new ArgumentException("FIFO allocation cost does not match the synchronized lot cost.");
                 inventoryLot.AvailableQuantity -= lotPayload.Quantity;
@@ -1178,8 +1195,12 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     throw new ArgumentException("Invalid FIFO allocation.");
                 line.Lots.Add(new SaleLotAllocation
                 {
-                    GlobalId = lot.GlobalId,
-                    InventoryLotGlobalId = lot.LotGlobalId,
+                    GlobalId = lot.GlobalId != Guid.Empty
+                        ? lot.GlobalId
+                        : CreateLegacySaleLotAllocationGlobalId(
+                            linePayload.DetailGlobalId,
+                            ResolveInventoryLotGlobalId(lot)),
+                    InventoryLotGlobalId = ResolveInventoryLotGlobalId(lot),
                     Quantity = lot.Quantity,
                     UnitCostCents = lot.UnitCostCents,
                     TotalCostCents = lot.TotalCostCents
@@ -1221,6 +1242,11 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         if (sale.Status != "Confirmed") throw new ArgumentException("Only confirmed sales can be cancelled.");
 
         var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
+        await ValidateSaleCancellationAuthorizationAsync(
+            payload,
+            tenant,
+            cancellationToken);
+
         foreach (var line in sale.Lines)
         {
             var previousStock = await _db.InventoryLots.AsNoTracking()
@@ -1294,21 +1320,214 @@ public sealed class SyncService(PosDbContext db) : ISyncService
     }
 
 
-    private static void EnsureOperationAuthorized(SyncOperationDto operation, SyncTenantContext tenant)
+    private async Task ValidateSaleCancellationAuthorizationAsync(
+        SaleCancelSyncPayload payload,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
     {
-        if (tenant.Role == "Administrator") return;
+        var actorRole = await _db.Users.AsNoTracking()
+            .Where(x =>
+                x.BusinessId == tenant.BusinessId &&
+                x.GlobalId == payload.UserGlobalId &&
+                x.Active)
+            .Select(x => x.Role)
+            .SingleOrDefaultAsync(cancellationToken);
 
-        var allowed = tenant.Role switch
-        {
-            "Manager" => operation.EntityType is not ("Business" or "Branch" or "Device" or "User"),
-            "Supervisor" => operation.EntityType is "Sale" or "CashSession" or "CashMovement" or "Purchase" or "Expense",
-            "Seller" => operation.EntityType is "Sale" or "CashSession",
-            _ => false
-        };
-        if (!allowed)
-            throw new UnauthorizedAccessException("The authenticated role cannot synchronize this operation.");
+        if (actorRole is null)
+            throw new CashMovementAuthorizationException(
+                "Sale cancellation actor is not an active user of the authenticated business.");
+
+        if (actorRole is "Administrator" or "Manager")
+            return;
+
+        if (actorRole is not ("Supervisor" or "Seller"))
+            throw new CashMovementAuthorizationException(
+                "Sale cancellation actor is not allowed.");
+
+        if (payload.Authorization is not { } authorization ||
+            authorization.ValueKind != JsonValueKind.Object)
+            throw new CashMovementAuthorizationException(
+                "Sale cancellation requires second-user authorization.");
+
+        var capability = RequiredAuthorizationString(
+            authorization,
+            "capability");
+        var requirement = RequiredAuthorizationString(
+            authorization,
+            "requirement");
+        var performedBy = RequiredAuthorizationGuid(
+            authorization,
+            "performedByUserGlobalId");
+        var authorizedBy = RequiredAuthorizationGuid(
+            authorization,
+            "authorizedByUserGlobalId");
+        var businessGlobalId = RequiredAuthorizationGuid(
+            authorization,
+            "businessGlobalId");
+        var deviceGlobalId = RequiredAuthorizationGuid(
+            authorization,
+            "deviceGlobalId");
+        var entityType = RequiredAuthorizationString(
+            authorization,
+            "entityType");
+        var entityGlobalId = RequiredAuthorizationGuid(
+            authorization,
+            "entityGlobalId");
+        var authOperation = RequiredAuthorizationString(
+            authorization,
+            "operation");
+        var reason = RequiredAuthorizationString(
+            authorization,
+            "reason");
+
+        _ = RequiredAuthorizationGuid(
+            authorization,
+            "authorizationGlobalId");
+        _ = RequiredAuthorizationDate(
+            authorization,
+            "authorizedAt");
+        _ = RequiredAuthorizationDate(
+            authorization,
+            "consumedAt");
+
+        if (capability != "saleCancel" ||
+            requirement != "SecondUserAuthorization" ||
+            performedBy != payload.UserGlobalId ||
+            authorizedBy == payload.UserGlobalId ||
+            businessGlobalId != tenant.BusinessGlobalId ||
+            deviceGlobalId != tenant.DeviceGlobalId ||
+            entityType != "Sale" ||
+            entityGlobalId != payload.GlobalId ||
+            authOperation != "Cancel" ||
+            string.IsNullOrWhiteSpace(reason) ||
+            !string.Equals(
+                reason.Trim(),
+                payload.Reason.Trim(),
+                StringComparison.Ordinal))
+            throw new CashMovementAuthorizationException(
+                "Sale cancellation authorization metadata does not match the operation.");
+
+        var authorizerRole = await _db.Users.AsNoTracking()
+            .Where(x =>
+                x.BusinessId == tenant.BusinessId &&
+                x.GlobalId == authorizedBy &&
+                x.Active)
+            .Select(x => x.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (authorizerRole is not ("Manager" or "Administrator"))
+            throw new CashMovementAuthorizationException(
+                "Sale cancellation authorizer is not allowed.");
     }
 
+    private async Task EnsureOperationAuthorizedAsync(
+        SyncOperationDto operation,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
+    {
+        var actorGlobalId = OperationActorGlobalId(operation);
+
+        if (actorGlobalId is null)
+        {
+            EnsureRoleCanPerformOperation(
+                tenant.Role,
+                operation.EntityType,
+                operation.Operation);
+            return;
+        }
+
+        if (actorGlobalId.Value == Guid.Empty)
+        {
+            throw new UnauthorizedAccessException(
+                "Operation actor is required.");
+        }
+
+        var actorRole = await _db.Users
+            .AsNoTracking()
+            .Where(x =>
+                x.BusinessId == tenant.BusinessId &&
+                x.GlobalId == actorGlobalId.Value &&
+                x.Active)
+            .Select(x => x.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (actorRole is null)
+        {
+            throw new UnauthorizedAccessException(
+                "Operation actor is not an active user of the authenticated business.");
+        }
+
+        EnsureRoleCanPerformOperation(
+            actorRole,
+            operation.EntityType,
+            operation.Operation);
+    }
+
+    private static Guid? OperationActorGlobalId(SyncOperationDto operation)
+    {
+        return (operation.EntityType, operation.Operation) switch
+        {
+            ("Purchase", "Create") =>
+                Deserialize<PurchaseSyncPayload>(operation).UserGlobalId,
+
+            ("Expense", "Create") =>
+                Deserialize<ExpenseSyncPayload>(operation).UserGlobalId,
+
+            ("InventoryAdjustment", "Create") =>
+                Deserialize<InventoryAdjustmentSyncPayload>(operation).UserGlobalId,
+
+            ("CashSession", "Create") or
+            ("CashSession", "Update") =>
+                Deserialize<CashSessionSyncPayload>(operation).UserGlobalId,
+
+            ("CashMovement", "Create") =>
+                Deserialize<CashMovementSyncPayload>(operation).UserGlobalId,
+
+            ("Sale", "Create") =>
+                Deserialize<SaleSyncPayload>(operation).UserGlobalId,
+
+            ("Sale", "Cancel") =>
+                Deserialize<SaleCancelSyncPayload>(operation).UserGlobalId,
+
+            _ => null
+        };
+    }
+
+    private static void EnsureRoleCanPerformOperation(
+        string role,
+        string entityType,
+        string operation)
+    {
+        var allowed = role switch
+        {
+            "Administrator" => true,
+
+            "Manager" =>
+                entityType is not ("Business" or "Branch" or "Device" or "User"),
+
+            "Supervisor" =>
+                entityType is
+                    "Sale" or
+                    "CashSession" or
+                    "CashMovement" or
+                    "Purchase" or
+                    "Expense",
+
+            "Seller" =>
+                (entityType == "Sale" &&
+                    operation is "Create" or "Cancel") ||
+                entityType == "CashSession" ||
+                (entityType == "Purchase" && operation == "Create"),
+
+            _ => false
+        };
+
+        if (!allowed)
+        {
+            throw new UnauthorizedAccessException(
+                $"Role {role} cannot push {entityType}/{operation}.");
+        }
+    }
     private static void ValidateTransactionalContext(
         Guid businessGlobalId,
         Guid branchGlobalId,
@@ -1333,16 +1552,11 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         SyncTenantContext tenant,
         CancellationToken cancellationToken)
     {
-        if (userGlobalId != tenant.UserGlobalId)
-            throw new UnauthorizedAccessException(
-                "Operation user does not match the authenticated user.");
 
         var id = await _db.Users.AsNoTracking()
             .Where(x => x.BusinessId == tenant.BusinessId &&
-                        x.Id == tenant.UserId &&
                         x.GlobalId == userGlobalId &&
-                        x.Active &&
-                        x.Role == tenant.Role)
+                        x.Active)
             .Select(x => x.Id)
             .SingleOrDefaultAsync(cancellationToken);
         if (id == 0) throw new InvalidOperationException($"Referenced user {userGlobalId} has not been synchronized yet.");
@@ -1443,6 +1657,40 @@ public sealed class SyncService(PosDbContext db) : ISyncService
     private static ProductPullPayload BuildProductPayload(Product entity, Guid businessGlobalId) =>
         new(entity.GlobalId, businessGlobalId, entity.CategoryGlobalId, entity.Code, entity.Barcode, entity.Name, entity.Presentation, entity.SalePriceCents, entity.MinimumStock, entity.Active, entity.UpdatedAt, entity.ServerVersion);
 
+    private static Guid ResolveInventoryLotGlobalId(SaleLotSyncPayload payload)
+    {
+        if (payload.LotGlobalId != Guid.Empty)
+            return payload.LotGlobalId;
+
+        if (payload.InventoryLotGlobalId is { } legacyGlobalId &&
+            legacyGlobalId != Guid.Empty)
+            return legacyGlobalId;
+
+        throw new ArgumentException(
+            "FIFO allocation requires lotGlobalId or inventoryLotGlobalId.");
+    }
+
+    private static Guid CreateLegacySaleLotAllocationGlobalId(
+        Guid detailGlobalId,
+        Guid inventoryLotGlobalId)
+    {
+        Span<byte> input = stackalloc byte[32];
+        detailGlobalId.TryWriteBytes(input[..16]);
+        inventoryLotGlobalId.TryWriteBytes(input[16..]);
+
+        Span<byte> hash = stackalloc byte[32];
+        System.Security.Cryptography.SHA256.HashData(input, hash);
+
+        Span<byte> result = stackalloc byte[16];
+        hash[..16].CopyTo(result);
+
+        // Deterministic UUID. Same historical allocation always receives
+        // the same identifier on every retry.
+        result[7] = (byte)((result[7] & 0x0F) | 0x50);
+        result[8] = (byte)((result[8] & 0x3F) | 0x80);
+
+        return new Guid(result);
+    }
     private static T Deserialize<T>(SyncOperationDto operation) where T : class =>
         operation.Payload.Deserialize<T>(JsonOptions) ?? throw new JsonException($"Invalid {operation.EntityType} payload.");
 

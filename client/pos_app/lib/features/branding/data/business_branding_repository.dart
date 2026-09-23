@@ -106,7 +106,7 @@ final class BusinessBrandingRepository {
   }
 
   static String validateLogo(Uint8List bytes) {
-    if (bytes.isEmpty) throw ArgumentError('El logo está vacío.');
+    if (bytes.isEmpty) throw ArgumentError('El logo estÃ¡ vacÃ­o.');
     if (bytes.length > businessLogoMaxBytes) {
       throw ArgumentError('El logo no debe superar 256 KiB.');
     }
@@ -128,7 +128,7 @@ final class BusinessBrandingRepository {
         ascii.decode(bytes.sublist(8, 12), allowInvalid: true) == 'WEBP') {
       return 'image/webp';
     }
-    throw ArgumentError('Selecciona una imagen PNG, JPEG o WebP válida.');
+    throw ArgumentError('Selecciona una imagen PNG, JPEG o WebP vÃ¡lida.');
   }
 
   Future<void> save({
@@ -169,24 +169,65 @@ final class BusinessBrandingRepository {
         where: 'id = ?',
         whereArgs: [context.businessId],
       );
+      final payload = {
+        'globalId': context.businessGlobalId,
+        'name': current['name'],
+        'active': current['active'] == 1,
+        'updatedAt': now,
+        'baseServerVersion': current['server_version'],
+        'displayName': name,
+        'logoBase64': logoBytes == null ? null : base64Encode(logoBytes),
+        'logoMimeType': mime,
+        'primaryColor': primaryColor,
+        'brandingUpdatedAt': now,
+      };
+      final serverVersion = current['server_version'] as int;
+      if (serverVersion == 0) {
+        final pendingCreates = await tx.query(
+          'sync_queue',
+          columns: ['id', 'payload_json'],
+          where: "entity_type = ? AND entity_global_id = ? AND operation = ? AND status = ? AND retry_count = 0 AND last_attempt_at IS NULL AND requires_action = 0",
+          whereArgs: [
+            'Business',
+            context.businessGlobalId,
+            'Create',
+            'Pending',
+          ],
+          orderBy: 'id ASC',
+        );
+        if (pendingCreates.length == 1) {
+          final create = pendingCreates.single;
+          final createPayload = Map<String, Object?>.from(
+            jsonDecode(create['payload_json'] as String) as Map,
+          );
+          createPayload
+            ..['name'] = current['name']
+            ..['active'] = current['active'] == 1
+            ..['updatedAt'] = now
+            ..['displayName'] = name
+            ..['logoBase64'] = logoBytes == null
+                ? null
+                : base64Encode(logoBytes)
+            ..['logoMimeType'] = mime
+            ..['primaryColor'] = primaryColor
+            ..['brandingUpdatedAt'] = now;
+          createPayload.remove('baseServerVersion');
+          await tx.update(
+            'sync_queue',
+            {'payload_json': jsonEncode(createPayload)},
+            where: 'id = ?',
+            whereArgs: [create['id']],
+          );
+          return;
+        }
+      }
       await tx.insert('sync_queue', {
         'global_id': _ids.newId(),
         'entity_type': 'Business',
         'entity_global_id': context.businessGlobalId,
         'operation': 'Update',
         'payload_version': 1,
-        'payload_json': jsonEncode({
-          'globalId': context.businessGlobalId,
-          'name': current['name'],
-          'active': current['active'] == 1,
-          'updatedAt': now,
-          'baseServerVersion': current['server_version'],
-          'displayName': name,
-          'logoBase64': logoBytes == null ? null : base64Encode(logoBytes),
-          'logoMimeType': mime,
-          'primaryColor': primaryColor,
-          'brandingUpdatedAt': now,
-        }),
+        'payload_json': jsonEncode(payload),
         'created_at': now,
       });
     });

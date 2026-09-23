@@ -39,6 +39,7 @@ class _SyncStatusPanelState extends State<SyncStatusPanel> {
   late final SyncStatusController _controller =
       widget.controller ?? SyncStatusController(localSyncRepository);
   Future<SyncSummary>? _summary;
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -78,13 +79,32 @@ class _SyncStatusPanelState extends State<SyncStatusPanel> {
     leading: Icon(_icon(summary)),
     title: Text(summary.headline),
     subtitle: _details(summary),
-    onTap:
-        (summary.attentionCount > 0 ||
-                summary.pullFailure?.requiresAction == true) &&
-            widget.summary == null
+    onTap: widget.summary != null || _syncing
+        ? null
+        : (summary.attentionCount > 0 ||
+              summary.pullFailure?.requiresAction == true)
         ? () => _showAttention(context, summary.pullFailure)
+        : (summary.pendingCount > 0 || summary.retryingCount > 0) &&
+              summary.isOnline
+        ? _synchronize
         : null,
   );
+
+  Future<void> _synchronize() async {
+    if (_syncing) return;
+
+    setState(() => _syncing = true);
+    try {
+      await syncService.synchronize();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _syncing = false;
+          _summary = _controller.load();
+        });
+      }
+    }
+  }
 
   Widget? _details(SyncSummary summary) {
     final labels = <String>[

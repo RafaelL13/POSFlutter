@@ -54,7 +54,7 @@ final class UserRepository {
       return 'El usuario es obligatorio.';
     }
     if (!RegExp(r'^[a-z0-9._-]{3,50}$').hasMatch(normalized)) {
-      return 'Usa de 3 a 50 caracteres: letras, números, punto, guion o guion bajo.';
+      return 'Usa de 3 a 50 caracteres: letras, nÃºmeros, punto, guion o guion bajo.';
     }
     return null;
   }
@@ -168,7 +168,7 @@ final class UserRepository {
   Future<void> resetPassword(UserSummary user, String password) async {
     final auth = await AuthorizationService(_db).require(Capability.usersWrite);
     if (password.length < 8) {
-      throw ArgumentError('La contraseña debe tener al menos 8 caracteres.');
+      throw ArgumentError('La contraseÃ±a debe tener al menos 8 caracteres.');
     }
     final context = auth.context!;
     final database = await _db.open();
@@ -219,7 +219,7 @@ final class UserRepository {
     final usernameError = validateUsername(input.username);
     if (usernameError != null) throw ArgumentError(usernameError);
     if (password != null && password.length < 8) {
-      throw ArgumentError('La contraseña debe tener al menos 8 caracteres.');
+      throw ArgumentError('La contraseÃ±a debe tener al menos 8 caracteres.');
     }
   }
 
@@ -247,24 +247,59 @@ final class UserRepository {
     String operation,
     int? version,
   ) async {
+    final payload = {
+      'globalId': globalId,
+      'businessGlobalId': businessGlobalId,
+      'name': input.name.trim(),
+      'username': input.username,
+      'passwordHash': hash.hash,
+      'passwordSalt': hash.salt,
+      'role': input.role.wireValue,
+      'active': input.active,
+      'updatedAt': now,
+      'baseServerVersion': version,
+    };
+
+    if (operation == 'Update' && version == 0) {
+      final pendingCreates = await tx.query(
+        'sync_queue',
+        columns: ['id', 'payload_json'],
+        where: "entity_type = ? AND entity_global_id = ? AND operation = ? AND status = ? AND retry_count = 0 AND last_attempt_at IS NULL AND requires_action = 0",
+        whereArgs: ['User', globalId, 'Create', 'Pending'],
+        orderBy: 'id ASC',
+      );
+      if (pendingCreates.length == 1) {
+        final create = pendingCreates.single;
+        final createPayload = Map<String, Object?>.from(
+          jsonDecode(create['payload_json'] as String) as Map,
+        );
+        createPayload
+          ..['businessGlobalId'] = businessGlobalId
+          ..['name'] = input.name.trim()
+          ..['username'] = input.username
+          ..['passwordHash'] = hash.hash
+          ..['passwordSalt'] = hash.salt
+          ..['role'] = input.role.wireValue
+          ..['active'] = input.active
+          ..['updatedAt'] = now;
+        createPayload.remove('baseServerVersion');
+        await tx.update(
+          'sync_queue',
+          {'payload_json': jsonEncode(createPayload)},
+          where: 'id = ?',
+          whereArgs: [create['id']],
+        );
+        return;
+      }
+    }
+
     await tx.insert('sync_queue', {
       'global_id': _ids.newId(),
       'entity_type': 'User',
       'entity_global_id': globalId,
       'operation': operation,
       'payload_version': 1,
-      'payload_json': jsonEncode({
-        'globalId': globalId,
-        'businessGlobalId': businessGlobalId,
-        'name': input.name.trim(),
-        'username': input.username,
-        'passwordHash': hash.hash,
-        'passwordSalt': hash.salt,
-        'role': input.role.wireValue,
-        'active': input.active,
-        'updatedAt': now,
-        'baseServerVersion': version,
-      }),
+      'payload_json': jsonEncode(payload),
       'created_at': now,
     });
   }

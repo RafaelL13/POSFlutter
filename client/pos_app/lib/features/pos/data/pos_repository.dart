@@ -154,8 +154,9 @@ final class PosRepository {
             'UPDATE inventory_lots SET available_quantity=available_quantity-? WHERE id=?',
             [a.quantity, a.lot.id],
           );
+          final allocationGlobalId = _ids.newId();
           await tx.insert('sale_detail_lots', {
-            'global_id': _ids.newId(),
+            'global_id': allocationGlobalId,
             'sale_detail_id': detailId,
             'inventory_lot_id': a.lot.id,
             'quantity': a.quantity,
@@ -163,7 +164,8 @@ final class PosRepository {
             'total_cost_cents': a.totalCostCents,
           });
           lotsPayload.add({
-            'inventoryLotGlobalId': a.lot.globalId,
+            'globalId': allocationGlobalId,
+            'lotGlobalId': a.lot.globalId,
             'quantity': a.quantity,
             'unitCostCents': a.lot.unitCostCents,
             'totalCostCents': a.totalCostCents,

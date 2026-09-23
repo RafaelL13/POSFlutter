@@ -32,6 +32,7 @@ final class SyncService {
         .require(Capability.syncPull);
     if (authorization.can(Capability.syncPush)) {
       await _local.recoverInterrupted();
+      await _local.repairFirstSyncQueue();
       final batch = await _local.nextBatch();
       if (batch.isNotEmpty) {
         await _local.markSyncing(batch);

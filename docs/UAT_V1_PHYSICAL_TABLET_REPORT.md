@@ -321,3 +321,65 @@ Automated evidence:
 - `git diff --check`: PASS.
 
 The source correction is complete but the performance P1 remains physically open until a new Profile APK is produced outside the restricted environment, installed without clearing UAT data, and login is measured again on the same tablet.
+
+## FASE G physical Sync E2E closure
+
+Environment and transport:
+
+- Physical tablet: `JK132110000931`.
+- Android package: `com.posflutter.pos_app`.
+- Public API endpoint: `https://api.lasaguilasmercadodelmar.com`.
+- Transport path: Android tablet -> Cloudflare public endpoint -> cloudflared -> IIS `POSFlutterApi` -> ASP.NET Core -> SQL Server `POSFlutter`.
+- Sales remained local/offline-first; remote synchronization was performed only after the local transactions already existed.
+- Existing tablet application data was preserved during Profile APK replacement with `adb install -r`.
+
+First-sync compatibility and authorization:
+
+- First-sync queue repair merged untouched Business/User updates into their original pending Create operations without changing the business entities or their global IDs.
+- Backend synchronization preserves the historical operation actor independently from the current transport/JWT user.
+- Cross-tenant actors and unauthorized historical actors are rejected.
+- Historical Sale FIFO payloads using `inventoryLotGlobalId` are accepted by the compatibility path; new Flutter Sale payloads use the canonical `globalId` + `lotGlobalId` allocation contract.
+- Historical FIFO allocation IDs missing from legacy payloads are generated deterministically by the backend compatibility path.
+
+Physical synchronization result:
+
+- Original local queue: 43 rows before first-sync compaction.
+- First-sync repair absorbed 5 redundant untouched updates, leaving 38 effective operations.
+- Final tablet SQLite: `PRAGMA integrity_check=ok`.
+- Final SyncQueue: 38 total, 38 `Synced`, 0 unresolved.
+- Central `InboundOperations`: 38.
+- Central Sales: 13.
+- Sale status distribution: 10 `Confirmed`, 3 `Cancelled`.
+- Central SaleLines: 13.
+- Central SaleLotAllocations: 13.
+- Central InventoryLots: 3.
+- FIFO allocation integrity: 0 missing SaleLines, 0 missing InventoryLots, 0 invalid quantities, 0 invalid costs, 0 cost mismatches.
+- Every SaleLine had allocated quantity equal to sold quantity (`Difference=0`).
+- Inventory movement totals: Purchase `+52`, Sale `-13`, Cancellation `+3`.
+- The three cancellations therefore restored exactly 3 units; the net effect of the 10 remaining confirmed sales is `-10`.
+- Cancellation reasons and cancellation metadata persisted centrally.
+
+Final client validation:
+
+- `flutter analyze`: PASS, 0 issues.
+- Flutter full suite: PASS, 357/357.
+- Profile APK build: PASS.
+- Profile APK size: 110493335 bytes.
+- Profile APK SHA256: `914BFDB35DD3F123335EA425102E3E867F1ECEF480E4ACEAB0F71B10D8E2C55C`.
+- Profile APK was installed with `adb install -r`; application data was not cleared.
+- `git diff --check`: PASS.
+
+Final backend validation:
+
+- Infrastructure test assembly: PASS, 84/84 through the xUnit v3 direct assembly runner.
+- Corrected Release backend artifact SHA256: `79AEAB9A3FA39DF51BA26760DF648CE8E187E257086307FBBC15563304DE26EF`.
+- IIS deployment health: local `200 Healthy`, public `200 Healthy`.
+- No SQL reset was performed after the final backend deployment.
+
+Result:
+
+- `LOCAL_OFFLINE_UAT=PASS`.
+- `PHYSICAL_SYNC_E2E=PASS`.
+- `FIFO_REMOTE_INTEGRITY=PASS`.
+- `REMOTE_CANCELLATION_RESTITUTION=PASS`.
+- `SYNC_E2E_STATUS=CLOSED`.

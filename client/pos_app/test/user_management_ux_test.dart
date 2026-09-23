@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/app/route_authorization.dart';
@@ -232,6 +234,164 @@ void main() {
       );
     },
   );
+
+  test(
+    'user update before first sync coalesces into pending User Create',
+    () async {
+      final database = await _database('Administrator');
+      addTearDown(database.close);
+      final repository = UserRepository(database);
+
+      final globalId = await repository.create(
+        input: const UserInput(
+          name: 'Usuario Inicial',
+          username: 'usuario.inicial',
+          role: AppRole.seller,
+          active: true,
+        ),
+        password: 'segura123',
+      );
+
+      final db = await database.open();
+      final row = (await db.query(
+        'users',
+        where: 'global_id=?',
+        whereArgs: [globalId],
+        limit: 1,
+      )).single;
+
+      final summary = UserSummary(
+        id: row['id'] as int,
+        globalId: globalId,
+        name: row['name'] as String,
+        username: row['username'] as String,
+        role: AppRole.seller,
+        active: true,
+        lastActivity: null,
+      );
+
+      await repository.update(
+        user: summary,
+        input: const UserInput(
+          name: 'Usuario Final',
+          username: 'usuario.final',
+          role: AppRole.seller,
+          active: true,
+        ),
+      );
+
+      final queue = await db.query(
+        'sync_queue',
+        where: 'entity_type=? AND entity_global_id=?',
+        whereArgs: ['User', globalId],
+        orderBy: 'id ASC',
+      );
+      expect(queue, hasLength(1));
+      expect(queue.single['operation'], 'Create');
+
+      final payload = jsonDecode(
+        queue.single['payload_json'] as String,
+      ) as Map<String, dynamic>;
+      expect(payload['name'], 'Usuario Final');
+      expect(payload['username'], 'usuario.final');
+      expect(payload['role'], 'Seller');
+      expect(payload.containsKey('baseServerVersion'), isFalse);
+      expect(payload['passwordHash'], isNotEmpty);
+      expect(payload['passwordSalt'], isNotEmpty);
+    },
+  );
+
+  test('attempted User Create is never rewritten', () async {
+    final database = await _database('Administrator');
+    addTearDown(database.close);
+
+    final repository = UserRepository(database);
+
+    final globalId = await repository.create(
+      input: const UserInput(
+        name: 'Usuario Inicial',
+        username: 'usuario.inicial',
+        role: AppRole.seller,
+        active: true,
+      ),
+      password: 'segura123',
+    );
+
+    final db = await database.open();
+
+    final create = (await db.query(
+      'sync_queue',
+      where: "entity_type=? AND entity_global_id=? AND operation='Create'",
+      whereArgs: ['User', globalId],
+      limit: 1,
+    )).single;
+
+    final createId = create['id'] as int;
+    final createPayloadBefore = create['payload_json'] as String;
+    final attemptedAt = DateTime.utc(2026, 9, 20, 12).toIso8601String();
+
+    await db.update(
+      'sync_queue',
+      {'retry_count': 1, 'last_attempt_at': attemptedAt},
+      where: 'id=?',
+      whereArgs: [createId],
+    );
+
+    final row = (await db.query(
+      'users',
+      where: 'global_id=?',
+      whereArgs: [globalId],
+      limit: 1,
+    )).single;
+
+    final summary = UserSummary(
+      id: row['id'] as int,
+      globalId: globalId,
+      name: row['name'] as String,
+      username: row['username'] as String,
+      role: AppRole.seller,
+      active: true,
+      lastActivity: null,
+    );
+
+    await repository.update(
+      user: summary,
+      input: const UserInput(
+        name: 'Usuario Final',
+        username: 'usuario.final',
+        role: AppRole.seller,
+        active: true,
+      ),
+    );
+
+    final createAfter = (await db.query(
+      'sync_queue',
+      where: 'id=?',
+      whereArgs: [createId],
+      limit: 1,
+    )).single;
+
+    expect(createAfter['operation'], 'Create');
+    expect(createAfter['retry_count'], 1);
+    expect(createAfter['last_attempt_at'], attemptedAt);
+    expect(createAfter['payload_json'], createPayloadBefore);
+
+    final updates = await db.query(
+      'sync_queue',
+      where: "entity_type=? AND entity_global_id=? AND operation='Update'",
+      whereArgs: ['User', globalId],
+    );
+
+    expect(updates, hasLength(1));
+
+    final updatePayload = jsonDecode(
+      updates.single['payload_json'] as String,
+    ) as Map<String, dynamic>;
+
+    expect(updatePayload['name'], 'Usuario Final');
+    expect(updatePayload['username'], 'usuario.final');
+    expect(updatePayload['baseServerVersion'], 0);
+  });
 
   testWidgets('user management is responsive and protects rapid double open', (
     tester,

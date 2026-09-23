@@ -54,6 +54,141 @@ void main() {
     },
   );
 
+  test(
+    'branding before first sync coalesces into pending Business Create',
+    () async {
+      final database = await _fixture(role: 'Administrator');
+      addTearDown(database.close);
+      final db = await database.open();
+      final now = DateTime.utc(2026, 9, 20).toIso8601String();
+
+      await db.insert('sync_queue', {
+        'global_id': 'business-create-op',
+        'entity_type': 'Business',
+        'entity_global_id': 'business-1',
+        'operation': 'Create',
+        'payload_version': 1,
+        'payload_json': jsonEncode({
+          'globalId': 'business-1',
+          'name': 'Business',
+          'active': true,
+          'updatedAt': now,
+          'serverVersion': 0,
+          'displayName': 'Business',
+          'logoBase64': null,
+          'logoMimeType': null,
+          'primaryColor': null,
+          'brandingUpdatedAt': now,
+        }),
+        'created_at': now,
+      });
+
+      final repository = BusinessBrandingRepository(database);
+      await repository.save(
+        displayName: 'Primera marca',
+        logoBytes: null,
+        primaryColor: businessBrandColors.first,
+      );
+      await repository.save(
+        displayName: 'Marca final',
+        logoBytes: null,
+        primaryColor: businessBrandColors[1],
+      );
+
+      final queue = await db.query(
+        'sync_queue',
+        where: "entity_type='Business' AND entity_global_id='business-1'",
+        orderBy: 'id ASC',
+      );
+      expect(queue, hasLength(1));
+      expect(queue.single['global_id'], 'business-create-op');
+      expect(queue.single['operation'], 'Create');
+
+      final payload = jsonDecode(
+        queue.single['payload_json'] as String,
+      ) as Map<String, dynamic>;
+      expect(payload['displayName'], 'Marca final');
+      expect(payload['primaryColor'], businessBrandColors[1]);
+      expect(payload.containsKey('baseServerVersion'), isFalse);
+      expect(payload['serverVersion'], 0);
+    },
+  );
+
+  test('attempted Business Create is never rewritten', () async {
+    final database = await _fixture(role: 'Administrator');
+    addTearDown(database.close);
+
+    final db = await database.open();
+    final now = DateTime.utc(2026, 9, 20).toIso8601String();
+
+    await db.insert('sync_queue', {
+      'global_id': 'attempted-business-create',
+      'entity_type': 'Business',
+      'entity_global_id': 'business-1',
+      'operation': 'Create',
+      'payload_version': 1,
+      'payload_json': jsonEncode({
+        'globalId': 'business-1',
+        'name': 'Business',
+        'active': true,
+        'updatedAt': now,
+        'serverVersion': 0,
+        'displayName': 'Original',
+        'logoBase64': null,
+        'logoMimeType': null,
+        'primaryColor': null,
+        'brandingUpdatedAt': now,
+      }),
+      'created_at': now,
+      'retry_count': 1,
+      'last_attempt_at': now,
+    });
+
+    final before =
+        (await db.query(
+              'sync_queue',
+              columns: ['payload_json'],
+              where: 'global_id=?',
+              whereArgs: ['attempted-business-create'],
+              limit: 1,
+            )).single['payload_json']
+            as String;
+
+    final repository = BusinessBrandingRepository(database);
+
+    await repository.save(
+      displayName: 'Nueva marca',
+      logoBytes: null,
+      primaryColor: businessBrandColors.first,
+    );
+
+    final create = (await db.query(
+      'sync_queue',
+      where: 'global_id=?',
+      whereArgs: ['attempted-business-create'],
+      limit: 1,
+    )).single;
+
+    expect(create['operation'], 'Create');
+    expect(create['retry_count'], 1);
+    expect(create['payload_json'], before);
+
+    final updates = await db.query(
+      'sync_queue',
+      where: "entity_type=? AND entity_global_id=? AND operation='Update'",
+      whereArgs: ['Business', 'business-1'],
+    );
+
+    expect(updates, hasLength(1));
+
+    final updatePayload = jsonDecode(
+      updates.single['payload_json'] as String,
+    ) as Map<String, dynamic>;
+
+    expect(updatePayload['displayName'], 'Nueva marca');
+    expect(updatePayload['baseServerVersion'], 0);
+  });
+
   for (final role in ['Seller', 'Supervisor']) {
     test('$role cannot write branding', () async {
       final database = await _fixture(role: role);

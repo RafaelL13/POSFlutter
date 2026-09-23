@@ -18,6 +18,151 @@ final class SyncRepository {
   final AppDatabase _database;
   final IdGenerator _ids;
 
+  Future<void> repairFirstSyncQueue() async {
+    await AuthorizationService(_database).require(Capability.syncPush);
+
+    await _database.criticalTransaction((tx) async {
+      for (final spec in const [
+        (entityType: 'Business', table: 'businesses'),
+        (entityType: 'User', table: 'users'),
+      ]) {
+        final creates = await tx.query(
+          'sync_queue',
+          columns: ['id', 'entity_global_id', 'payload_json'],
+          where:
+              "entity_type = ? AND operation = ? AND status = ? "
+              "AND retry_count = 0 AND last_attempt_at IS NULL "
+              "AND requires_action = 0",
+          whereArgs: [spec.entityType, 'Create', 'Pending'],
+          orderBy: 'id ASC',
+        );
+
+        for (final create in creates) {
+          final createId = create['id'] as int;
+          final entityGlobalId = create['entity_global_id'] as String;
+
+          final localRows = await tx.query(
+            spec.table,
+            columns: ['server_version'],
+            where: 'global_id = ?',
+            whereArgs: [entityGlobalId],
+            limit: 1,
+          );
+          if (localRows.length != 1 ||
+              (localRows.single['server_version'] as int) != 0) {
+            continue;
+          }
+
+          // If any update for this entity was already attempted, is in an
+          // actionable/error state, or precedes the Create, leave the entire
+          // entity untouched. We cannot prove that rewriting it is safe.
+          final allUpdates = await tx.query(
+            'sync_queue',
+            columns: [
+              'id',
+              'status',
+              'retry_count',
+              'last_attempt_at',
+              'requires_action',
+              'payload_json',
+            ],
+            where: "entity_type = ? AND entity_global_id = ? AND operation = ?",
+            whereArgs: [spec.entityType, entityGlobalId, 'Update'],
+            orderBy: 'id ASC',
+          );
+
+          if (allUpdates.isEmpty) {
+            continue;
+          }
+
+          final safe = allUpdates.every((row) {
+            return (row['id'] as int) > createId &&
+                row['status'] == 'Pending' &&
+                (row['retry_count'] as int) == 0 &&
+                row['last_attempt_at'] == null &&
+                (row['requires_action'] as int) == 0;
+          });
+          if (!safe) {
+            continue;
+          }
+
+          final createPayload = Map<String, Object?>.from(
+            jsonDecode(create['payload_json'] as String) as Map,
+          );
+
+          for (final update in allUpdates) {
+            final updatePayload = Map<String, Object?>.from(
+              jsonDecode(update['payload_json'] as String) as Map,
+            );
+
+            if (updatePayload['globalId'] != entityGlobalId ||
+                createPayload['globalId'] != entityGlobalId) {
+              throw StateError(
+                'First-sync queue identity mismatch for ${spec.entityType}.',
+              );
+            }
+
+            if (spec.entityType == 'Business') {
+              for (final key in const [
+                'name',
+                'active',
+                'updatedAt',
+                'displayName',
+                'logoBase64',
+                'logoMimeType',
+                'primaryColor',
+                'brandingUpdatedAt',
+              ]) {
+                if (updatePayload.containsKey(key)) {
+                  createPayload[key] = updatePayload[key];
+                }
+              }
+            } else {
+              if (updatePayload['businessGlobalId'] !=
+                  createPayload['businessGlobalId']) {
+                throw StateError('First-sync User business identity mismatch.');
+              }
+              for (final key in const [
+                'businessGlobalId',
+                'name',
+                'username',
+                'passwordHash',
+                'passwordSalt',
+                'role',
+                'active',
+                'updatedAt',
+              ]) {
+                if (updatePayload.containsKey(key)) {
+                  createPayload[key] = updatePayload[key];
+                }
+              }
+            }
+          }
+
+          createPayload.remove('baseServerVersion');
+          if (spec.entityType == 'Business') {
+            createPayload['serverVersion'] = 0;
+          }
+
+          await tx.update(
+            'sync_queue',
+            {'payload_json': jsonEncode(createPayload)},
+            where: 'id = ?',
+            whereArgs: [createId],
+          );
+
+          final updateIds = allUpdates.map((row) => row['id'] as int).toList();
+          final placeholders = List.filled(updateIds.length, '?').join(',');
+          await tx.delete(
+            'sync_queue',
+            where: 'id IN ($placeholders)',
+            whereArgs: updateIds,
+          );
+        }
+      }
+    });
+  }
+
   Future<List<SyncOperationRecord>> nextBatch({int limit = 50}) async {
     await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();

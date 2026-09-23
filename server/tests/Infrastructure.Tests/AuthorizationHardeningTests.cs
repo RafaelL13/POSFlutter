@@ -53,26 +53,30 @@ public sealed class AuthorizationHardeningTests
     }
 
     [Fact]
-    public async Task Transactional_payload_cannot_impersonate_another_tenant_user()
+    public async Task Same_tenant_historical_actor_is_checked_against_its_real_role()
     {
         await using var test = await TestDatabase.CreateAsync();
         var tenant = await test.SeedTenantAsync("Actor", role: "Administrator");
+
         var other = new UserAccount
         {
             GlobalId = Guid.NewGuid(),
             BusinessId = tenant.Business.Id,
-            Name = "Other User",
-            Username = $"other-{Guid.NewGuid():N}",
+            Name = "Historical Seller",
+            Username = $"historical-{Guid.NewGuid():N}",
             PasswordHash = "hash",
             PasswordSalt = "salt",
             Role = "Seller",
+            Active = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+
         test.Db.Users.Add(other);
         await test.Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var entityId = Guid.NewGuid();
+
         using var payload = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
             globalId = entityId,
@@ -81,31 +85,33 @@ public sealed class AuthorizationHardeningTests
             deviceGlobalId = tenant.Device.GlobalId,
             userGlobalId = other.GlobalId,
             date = DateTimeOffset.UtcNow,
-            concept = "Impersonated expense",
+            concept = "Seller cannot create expense",
             category = "Security",
             amountCents = 100L,
             paymentMethod = "Cash",
             notes = (string?)null
         }));
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            new SyncService(test.Db).PushAsync(
-                new SyncPushRequest([
-                    new SyncOperationDto(
-                        Guid.NewGuid(),
-                        "Expense",
-                        entityId,
-                        "Create",
-                        1,
-                        payload.RootElement.Clone())
-                ]),
-                Context(tenant),
-                TestContext.Current.CancellationToken));
+        var response = await new SyncService(test.Db).PushAsync(
+            new SyncPushRequest([
+                new SyncOperationDto(
+                    Guid.NewGuid(),
+                    "Expense",
+                    entityId,
+                    "Create",
+                    1,
+                    payload.RootElement.Clone())
+            ]),
+            Context(tenant),
+            TestContext.Current.CancellationToken);
 
+        var result = Assert.Single(response.Results);
+
+        Assert.Equal("Rejected", result.Status);
+        Assert.Equal(SyncErrorCodes.RoleDenied, result.ErrorCode);
         Assert.Empty(test.Db.Expenses);
         Assert.Empty(test.Db.InboundOperations);
     }
-
     [Fact]
     public async Task Forged_authorization_metadata_does_not_bypass_role_policy()
     {
