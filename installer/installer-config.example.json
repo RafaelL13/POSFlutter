@@ -1,0 +1,13 @@
+{
+  "server": {
+    "siteName": "POSFlutterApi",
+    "appPoolName": "POSFlutterApiPool",
+    "installPath": "C:\\Apps\\POSFlutter\\Api",
+    "port": 8080,
+    "publicHealthUrl": "https://api.example.com/health"
+  },
+  "tablet": {
+    "minimumSdk": 24,
+    "packageName": "com.posflutter.pos_app"
+  }
+}
