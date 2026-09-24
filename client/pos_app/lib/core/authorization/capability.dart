@@ -33,6 +33,7 @@ enum Capability {
   inventoryLotsRead,
   inventoryAdjust,
 
+  initialInventoryImport,
   reportsOperational,
   reportsFinancial,
 
@@ -85,6 +86,7 @@ extension CapabilityPolicyMetadata on Capability {
       Capability.categoryWrite ||
       Capability.supplierWrite ||
       Capability.inventoryAdjust ||
+      Capability.initialInventoryImport ||
       Capability.usersWrite ||
       Capability.devicesWrite ||
       Capability.businessWrite ||

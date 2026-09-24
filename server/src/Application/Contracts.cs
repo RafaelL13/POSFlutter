@@ -50,6 +50,8 @@ public sealed record ProductSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid
 
 public sealed record PurchaseLineSyncPayload(Guid DetailGlobalId,Guid ProductGlobalId,int Quantity,long UnitCostCents,long SubtotalCents,Guid LotGlobalId);
 public sealed record PurchaseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,Guid SupplierGlobalId,DateTimeOffset Date,string? Reference,string? Notes,long TotalCents,IReadOnlyList<PurchaseLineSyncPayload> Lines);
+public sealed record InitialInventoryLineSyncPayload(Guid GlobalId,Guid ProductGlobalId,Guid LotGlobalId,int Quantity,long UnitCostCents);
+public sealed record InitialInventorySyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,string SourceFingerprint,string? SourceName,DateTimeOffset CreatedAt,IReadOnlyList<InitialInventoryLineSyncPayload> Lines);
 public sealed record InventoryLotAllocationPayload(Guid LotGlobalId,int Quantity,long UnitCostCents);
 public sealed record InventoryAdjustmentSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,Guid ProductGlobalId,DateTimeOffset Date,string Type,int QuantityDelta,string Reason,Guid? NewLotGlobalId,long? UnitCostCents,IReadOnlyList<InventoryLotAllocationPayload> Allocations);
 public sealed record ExpenseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset Date,string Concept,string? Category,long AmountCents,string PaymentMethod,string? Notes);

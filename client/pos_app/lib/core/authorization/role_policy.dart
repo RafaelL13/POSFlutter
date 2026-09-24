@@ -127,6 +127,8 @@ abstract final class RolePolicy {
 
       Capability.syncPush || Capability.syncPull => PermissionLevel.full,
 
+      Capability.initialInventoryImport => PermissionLevel.none,
+
       _ => PermissionLevel.none,
     };
   }
@@ -154,6 +156,8 @@ abstract final class RolePolicy {
       Capability.saleDiscount ||
       Capability.cashCloseWithDifference =>
         PermissionLevel.requiresAuthorization,
+
+      Capability.initialInventoryImport => PermissionLevel.none,
 
       _ => PermissionLevel.none,
     };

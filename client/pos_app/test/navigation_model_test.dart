@@ -88,6 +88,53 @@ void main() {
       );
     });
 
+    test(
+      'Product import navigation follows initialInventoryImport capability',
+      () {
+        expect(
+          _labels(_effective(role: 'Administrator')),
+          contains('Importar productos'),
+        );
+        expect(
+          _labels(_effective(role: 'Manager')),
+          contains('Importar productos'),
+        );
+        expect(
+          _labels(_effective(role: 'Supervisor')),
+          isNot(contains('Importar productos')),
+        );
+        expect(
+          _labels(_effective(role: 'Seller')),
+          isNot(contains('Importar productos')),
+        );
+      },
+    );
+
+    test(
+      'Product import route does not inherit Settings businessWrite rule',
+      () {
+        final manager = _effective(role: 'Manager');
+
+        expect(RouteAuthorization.canOpen('/settings', manager), isFalse);
+        expect(
+          RouteAuthorization.canOpen('/settings/product-import', manager),
+          isTrue,
+        );
+      },
+    );
+
+    test('Product import is unavailable on AdminReadOnly device', () {
+      final adminReadOnly = _effective(
+        role: 'Administrator',
+        deviceMode: 'AdminReadOnly',
+      );
+
+      expect(
+        RouteAuthorization.canOpen('/settings/product-import', adminReadOnly),
+        isFalse,
+      );
+      expect(_labels(adminReadOnly), isNot(contains('Importar productos')));
+    });
     test('Administrator sees every relevant PointOfSale item', () {
       final sections = visibleNavigationSections(
         _effective(role: 'Administrator'),

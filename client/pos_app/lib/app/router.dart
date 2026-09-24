@@ -19,6 +19,7 @@ import 'package:pos_app/features/pos/presentation/pos_screen.dart';
 import 'package:pos_app/features/products/presentation/products_screen.dart';
 import 'package:pos_app/features/purchases/presentation/purchases_screen.dart';
 import 'package:pos_app/features/reports/presentation/reports_screen.dart';
+import 'package:pos_app/features/catalog_import/presentation/product_import_screen.dart';
 import 'package:pos_app/features/sales/presentation/sales_screen.dart';
 import 'package:pos_app/features/suppliers/presentation/suppliers_screen.dart';
 import 'package:pos_app/features/users/presentation/users_screen.dart';
@@ -69,6 +70,14 @@ GoRouter createAppRouter({
         GoRoute(path: '/users', builder: (_, _) => const UsersScreen()),
         GoRoute(path: '/backup', builder: (_, _) => const BackupScreen()),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+        GoRoute(
+          path: '/settings/product-import',
+          builder: (_, _) => const ProductImportScreen(),
+        ),
+        GoRoute(
+          path: '/settings/product-import',
+          builder: (_, _) => const ProductImportScreen(),
+        ),
         GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
         GoRoute(
           path: '/cloud-admin',

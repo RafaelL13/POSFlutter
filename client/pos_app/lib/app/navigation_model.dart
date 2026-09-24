@@ -56,6 +56,11 @@ const appNavigationSections = <AppNavigationSection>[
         route: '/products',
       ),
       AppNavigationItem(
+        label: 'Importar productos',
+        icon: Icons.upload_file_outlined,
+        route: '/settings/product-import',
+      ),
+      AppNavigationItem(
         label: 'Categorías',
         icon: Icons.category_outlined,
         route: '/categories',

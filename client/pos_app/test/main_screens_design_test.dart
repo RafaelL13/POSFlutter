@@ -75,6 +75,12 @@ void main() {
 
             expect(find.text(entry.value.visibleLabel), findsWidgets);
             expect(tester.takeException(), isNull);
+
+            // Dispose the rendered screen before the test ends.
+            // FirstRunScreen starts an asynchronous SQLite check in initState.
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 100));
           },
         );
       }

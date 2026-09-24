@@ -239,6 +239,9 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             case ("Purchase", "Create"):
                 await ApplyPurchaseAsync(operation, tenant, cancellationToken);
                 break;
+            case ("InitialInventory", "Create"):
+                await ApplyInitialInventoryAsync(operation, tenant, cancellationToken);
+                break;
             case ("Expense", "Create"):
                 await ApplyExpenseAsync(operation, tenant, cancellationToken);
                 break;
@@ -831,6 +834,34 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         if (computedTotal != payload.TotalCents)
             throw new ArgumentException("Purchase total does not equal the sum of lines.");
         _db.Purchases.Add(purchase);
+    }
+
+    private async Task ApplyInitialInventoryAsync(SyncOperationDto operation, SyncTenantContext tenant, CancellationToken cancellationToken)
+    {
+        var payload = Deserialize<InitialInventorySyncPayload>(operation);
+        ValidateEnvelope(operation, payload.GlobalId);
+        ValidateTransactionalContext(payload.BusinessGlobalId, payload.BranchGlobalId, payload.DeviceGlobalId, tenant);
+        if (string.IsNullOrWhiteSpace(payload.SourceFingerprint) || payload.Lines.Count == 0) throw new ArgumentException("Initial inventory is incomplete.");
+        var existing = await _db.InitialInventories.AsNoTracking().SingleOrDefaultAsync(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId && x.SourceFingerprint == payload.SourceFingerprint, cancellationToken);
+        if (existing is not null) {
+            if (existing.GlobalId == payload.GlobalId) return;
+            throw new ArgumentException("Initial inventory fingerprint was already applied.");
+        }
+        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
+        var entity = new InitialInventory { GlobalId = payload.GlobalId, BusinessId = tenant.BusinessId, BranchId = tenant.BranchId, DeviceId = tenant.DeviceId, UserId = userId, SourceFingerprint = payload.SourceFingerprint, SourceName = Clean(payload.SourceName), ValidRows = payload.Lines.Count, TotalUnits = payload.Lines.Sum(x => x.Quantity), CreatedAt = payload.CreatedAt };
+        var stocks = new Dictionary<Guid, int>();
+        foreach (var line in payload.Lines) {
+            if (line.Quantity <= 0 || line.UnitCostCents < 0) throw new ArgumentException("Invalid initial inventory line.");
+            if (!await _db.Products.AsNoTracking().AnyAsync(x => x.BusinessId == tenant.BusinessId && x.GlobalId == line.ProductGlobalId, cancellationToken)) throw new InvalidOperationException("Initial inventory product is not synchronized.");
+            if (await _db.InventoryLots.AsNoTracking().AnyAsync(x => x.BusinessId == tenant.BusinessId && x.GlobalId == line.LotGlobalId, cancellationToken)) throw new ArgumentException("Initial inventory lot already exists.");
+            var before = stocks.TryGetValue(line.ProductGlobalId, out var current) ? current : await _db.InventoryLots.AsNoTracking().Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId && x.ProductGlobalId == line.ProductGlobalId && x.Active).SumAsync(x => (int?)x.AvailableQuantity, cancellationToken) ?? 0;
+            var after = checked(before + line.Quantity); stocks[line.ProductGlobalId] = after;
+            _db.InventoryLots.Add(new InventoryLot { GlobalId = line.LotGlobalId, BusinessId = tenant.BusinessId, BranchId = tenant.BranchId, ProductGlobalId = line.ProductGlobalId, EntryDate = payload.CreatedAt, InitialQuantity = line.Quantity, AvailableQuantity = line.Quantity, UnitCostCents = line.UnitCostCents, Active = true, CreatedAt = DateTimeOffset.UtcNow });
+            _db.InventoryMovements.Add(new InventoryMovement { GlobalId = Guid.NewGuid(), BusinessId = tenant.BusinessId, BranchId = tenant.BranchId, ProductGlobalId = line.ProductGlobalId, MovementDate = payload.CreatedAt, Type = "InitialInventory", QuantityDelta = line.Quantity, PreviousStock = before, NewStock = after, ReferenceGlobalId = payload.GlobalId, UserId = userId, DeviceId = tenant.DeviceId, Notes = "Initial catalog import" });
+            entity.Lines.Add(new InitialInventoryLine { GlobalId = line.GlobalId, ProductGlobalId = line.ProductGlobalId, InventoryLotGlobalId = line.LotGlobalId, Quantity = line.Quantity, UnitCostCents = line.UnitCostCents });
+        }
+        _db.InitialInventories.Add(entity);
+        AddChange(tenant.BusinessId, "InitialInventory", payload.GlobalId, "Create", 1, payload);
     }
 
     private async Task ApplyCashSessionAsync(
@@ -1469,6 +1500,8 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         {
             ("Purchase", "Create") =>
                 Deserialize<PurchaseSyncPayload>(operation).UserGlobalId,
+            ("InitialInventory", "Create") =>
+                Deserialize<InitialInventorySyncPayload>(operation).UserGlobalId,
 
             ("Expense", "Create") =>
                 Deserialize<ExpenseSyncPayload>(operation).UserGlobalId,
@@ -1511,6 +1544,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     "CashSession" or
                     "CashMovement" or
                     "Purchase" or
+                    "InitialInventory" or
                     "Expense",
 
             "Seller" =>

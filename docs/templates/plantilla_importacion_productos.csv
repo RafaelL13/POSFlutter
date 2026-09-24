@@ -1,0 +1,3 @@
+SKU,Producto,Categoria,Proveedor,CostoCompra,PrecioVenta,ExistenciaInicial
+P001,Producto de ejemplo,Categoria General,Proveedor Ejemplo,100.00,140.00,10
+P002,Producto sin existencia,Categoria General,,50.00,75.00,0
