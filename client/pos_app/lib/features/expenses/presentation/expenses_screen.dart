@@ -14,6 +14,8 @@ class ExpensesScreen extends StatelessWidget {
     subtitle: 'Consulta y registra egresos operativos.',
     actionLabel: 'Registrar gasto',
     loadRows: ExpenseReadRepository(appDatabase).list,
+    rowTitle: expenseRowTitle,
+    rowSubtitle: expenseRowSubtitle,
     action: (dialogContext) async {
       final values = await textForm(dialogContext, 'Nuevo gasto', [
         'Concepto',
@@ -28,4 +30,27 @@ class ExpensesScreen extends StatelessWidget {
       return false;
     },
   );
+}
+
+String expenseRowTitle(Map<String, Object?> row) {
+  final concept = row['concept']?.toString().trim();
+  final rawDate = row['expense_date']?.toString();
+  final date = rawDate == null ? null : DateTime.tryParse(rawDate)?.toLocal();
+  final formattedDate = date == null
+      ? 'Fecha no disponible'
+      : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  return '${concept?.isNotEmpty == true ? concept : 'Gasto'} · $formattedDate';
+}
+
+String expenseRowSubtitle(Map<String, Object?> row) {
+  final paymentMethod = switch (row['payment_method']?.toString()) {
+    'Cash' => 'Efectivo',
+    'Card' => 'Tarjeta',
+    'Transfer' => 'Transferencia',
+    _ => 'Método de pago no disponible',
+  };
+  final amount = row['amount_cents'];
+  return amount is int
+      ? '$paymentMethod · ${formatMoney(amount)}'
+      : '$paymentMethod · Importe restringido';
 }

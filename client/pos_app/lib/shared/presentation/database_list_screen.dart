@@ -13,6 +13,8 @@ class DatabaseListScreen extends StatefulWidget {
     this.subtitle,
     this.actionLabel,
     this.showNavigation = true,
+    this.rowTitle,
+    this.rowSubtitle,
   }) : assert((query == null) != (loadRows == null));
   final String title;
   final String? query;
@@ -21,6 +23,8 @@ class DatabaseListScreen extends StatefulWidget {
   final String? subtitle;
   final String? actionLabel;
   final bool showNavigation;
+  final String Function(Map<String, Object?> row)? rowTitle;
+  final String Function(Map<String, Object?> row)? rowSubtitle;
   @override
   State<DatabaseListScreen> createState() => _DatabaseListScreenState();
 }
@@ -76,8 +80,13 @@ class _DatabaseListScreenState extends State<DatabaseListScreen> {
                 horizontal: AppSpacing.md,
                 vertical: AppSpacing.xs,
               ),
-              title: Text(rows[i].values.skip(1).take(2).join(' · ')),
-              subtitle: Text(_humanReadable(rows[i])),
+              title: Text(
+                widget.rowTitle?.call(rows[i]) ??
+                    rows[i].values.skip(1).take(2).join(' · '),
+              ),
+              subtitle: Text(
+                widget.rowSubtitle?.call(rows[i]) ?? _humanReadable(rows[i]),
+              ),
             ),
           ),
         );
