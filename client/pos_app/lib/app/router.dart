@@ -74,10 +74,6 @@ GoRouter createAppRouter({
           path: '/settings/product-import',
           builder: (_, _) => const ProductImportScreen(),
         ),
-        GoRoute(
-          path: '/settings/product-import',
-          builder: (_, _) => const ProductImportScreen(),
-        ),
         GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
         GoRoute(
           path: '/cloud-admin',
