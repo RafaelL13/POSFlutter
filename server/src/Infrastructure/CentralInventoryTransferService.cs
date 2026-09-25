@@ -45,6 +45,19 @@ public sealed class CentralInventoryTransferService(PosDbContext db) : ICentralI
         if (existing is not null)
             return new CentralTransferInResult(true, true, existing.Id.ToString());
 
+        var technicalDeviceId = await _db.Devices.AsNoTracking()
+            .Where(x => x.BranchId == branch.Id && x.Active)
+            .OrderBy(x => x.Id)
+            .Select(x => (long?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Destination branch has no active device for inventory audit attribution.");
+        var technicalUserId = await _db.Users.AsNoTracking()
+            .Where(x => x.BusinessId == business.Id && x.Active && x.Role == "Administrator")
+            .OrderBy(x => x.Id)
+            .Select(x => (long?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Destination business has no active administrator for inventory audit attribution.");
+
         if (request.Lines.Select(x => x.LotGlobalId).Distinct().Count() != request.Lines.Count)
             throw new ArgumentException("Central transfer contains duplicate lot identifiers.");
 
@@ -108,8 +121,8 @@ public sealed class CentralInventoryTransferService(PosDbContext db) : ICentralI
                     PreviousStock = previousStock,
                     NewStock = newStock,
                     ReferenceGlobalId = request.TransferGlobalId,
-                    UserId = 0,
-                    DeviceId = 0,
+                    UserId = technicalUserId,
+                    DeviceId = technicalDeviceId,
                     Notes = "InventarioCentral"
                 });
             }
