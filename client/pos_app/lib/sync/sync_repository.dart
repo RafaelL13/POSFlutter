@@ -473,6 +473,11 @@ final class SyncRepository {
     }
 
     _validateRemoteBusiness(change, context.businessGlobalId);
+    if (change.entityType == 'CentralTransferIn') {
+      await _applyCentralTransferIn(tx, change, context);
+      return;
+    }
+
     final localVersion = await _localServerVersion(
       tx,
       change.entityType,
@@ -517,6 +522,112 @@ final class SyncRepository {
         break;
       default:
         throw StateError('Entidad pull no soportada: ${change.entityType}.');
+    }
+  }
+
+  Future<void> _applyCentralTransferIn(
+    Transaction tx,
+    SyncPullChange change,
+    LocalAppContext context,
+  ) async {
+    final payload = change.payload;
+    if (_requiredString(payload, 'branchGlobalId') != context.branchGlobalId) {
+      return;
+    }
+
+    final existing = await tx.query(
+      'inventory_movements',
+      columns: ['id'],
+      where: 'type = ? AND reference_global_id = ? AND branch_id = ?',
+      whereArgs: ['CentralTransferIn', change.entityGlobalId, context.branchId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return;
+
+    final lines = payload['lines'];
+    if (lines is! List || lines.isEmpty) {
+      throw StateError('El traspaso central remoto no contiene líneas.');
+    }
+    final movementDate = _requiredDate(payload, 'date');
+    final seenLots = <String>{};
+    final stockByProduct = <int, int>{};
+
+    for (final rawLine in lines) {
+      if (rawLine is! Map) {
+        throw StateError('Una línea del traspaso central remoto es inválida.');
+      }
+      final line = Map<String, Object?>.from(rawLine);
+      final productGlobalId = _requiredString(line, 'productGlobalId');
+      final lotGlobalId = _requiredString(line, 'lotGlobalId');
+      final quantity = _requiredInt(line, 'quantity');
+      final unitCostCents = _requiredInt(
+        line,
+        'unitCostCents',
+        allowZero: true,
+      );
+      if (!seenLots.add(lotGlobalId)) {
+        throw StateError('El traspaso central remoto repite un lote.');
+      }
+
+      final products = await tx.query(
+        'products',
+        columns: ['id'],
+        where: 'global_id = ? AND business_id = ? AND active = 1',
+        whereArgs: [productGlobalId, context.businessId],
+        limit: 1,
+      );
+      if (products.isEmpty) {
+        throw StateError('Producto remoto inexistente o inactivo.');
+      }
+      final productId = products.single['id']! as int;
+
+      final lotCollision = await tx.query(
+        'inventory_lots',
+        columns: ['id'],
+        where: 'global_id = ?',
+        whereArgs: [lotGlobalId],
+        limit: 1,
+      );
+      if (lotCollision.isNotEmpty) {
+        throw StateError('El lote remoto ya existe con otra procedencia.');
+      }
+
+      final before =
+          stockByProduct[productId] ??
+          ((await tx.rawQuery(
+                'SELECT COALESCE(SUM(available_quantity),0) s FROM inventory_lots WHERE product_id=? AND branch_id=? AND active=1',
+                [productId, context.branchId],
+              )).single['s']
+              as int);
+      final after = before + quantity;
+      stockByProduct[productId] = after;
+
+      await tx.insert('inventory_lots', {
+        'global_id': lotGlobalId,
+        'product_id': productId,
+        'purchase_detail_id': null,
+        'branch_id': context.branchId,
+        'entry_date': movementDate,
+        'initial_quantity': quantity,
+        'available_quantity': quantity,
+        'unit_cost_cents': unitCostCents,
+        'active': 1,
+        'created_at': change.changedAt.toIso8601String(),
+      });
+      await tx.insert('inventory_movements', {
+        'global_id': _ids.newId(),
+        'product_id': productId,
+        'branch_id': context.branchId,
+        'movement_date': movementDate,
+        'type': 'CentralTransferIn',
+        'quantity_delta': quantity,
+        'previous_stock': before,
+        'new_stock': after,
+        'reference_global_id': change.entityGlobalId,
+        'user_id': context.userId,
+        'device_id': context.deviceId,
+        'notes': 'InventarioCentral',
+      });
     }
   }
 

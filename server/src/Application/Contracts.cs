@@ -53,6 +53,16 @@ public sealed record PurchaseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Gui
 public sealed record InitialInventoryLineSyncPayload(Guid GlobalId,Guid ProductGlobalId,Guid LotGlobalId,int Quantity,long UnitCostCents);
 public sealed record InitialInventorySyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,string SourceFingerprint,string? SourceName,DateTimeOffset CreatedAt,IReadOnlyList<InitialInventoryLineSyncPayload> Lines);
 public sealed record InventoryLotAllocationPayload(Guid LotGlobalId,int Quantity,long UnitCostCents);
+public sealed record CentralTransferInLine(Guid ProductGlobalId,Guid LotGlobalId,int Quantity,long UnitCostCents);
+public sealed record CentralTransferInRequest(Guid TransferGlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,DateTimeOffset Date,IReadOnlyList<CentralTransferInLine> Lines);
+public sealed record CentralTransferInResult(bool Succeeded,bool AlreadyReceived,string DestinationReceiptId);
+public sealed record CentralTransferInPullPayload(
+    Guid GlobalId,
+    Guid BusinessGlobalId,
+    Guid BranchGlobalId,
+    DateTimeOffset Date,
+    long ServerVersion,
+    IReadOnlyList<CentralTransferInLine> Lines);
 public sealed record InventoryAdjustmentSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,Guid ProductGlobalId,DateTimeOffset Date,string Type,int QuantityDelta,string Reason,Guid? NewLotGlobalId,long? UnitCostCents,IReadOnlyList<InventoryLotAllocationPayload> Allocations);
 public sealed record ExpenseSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset Date,string Concept,string? Category,long AmountCents,string PaymentMethod,string? Notes);
 public sealed record CashSessionSyncPayload(Guid GlobalId,Guid BusinessGlobalId,Guid BranchGlobalId,Guid DeviceGlobalId,Guid UserGlobalId,DateTimeOffset OpenedAt,long OpeningBalanceCents,string Status,DateTimeOffset? ClosedAt,long? CountedCashCents,long? ExpectedCashCents,long? DifferenceCents);

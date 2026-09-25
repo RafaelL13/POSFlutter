@@ -113,6 +113,14 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         return (business, branch, device, user);
     }
 
+    public PosDbContext CreateDbContext()
+    {
+        var options = new DbContextOptionsBuilder<PosDbContext>()
+            .UseSqlServer(_connectionString)
+            .Options;
+
+        return new PosDbContext(options);
+    }
     public async ValueTask DisposeAsync()
     {
         if (Db is null)

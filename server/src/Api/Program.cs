@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
@@ -196,6 +196,46 @@ reportApi.MapGet("/trends/products",async(DateTimeOffset? from,DateTimeOffset? t
  if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
  return Results.Ok(new{stableThresholdPercent=5.0,comparison="current period versus immediately preceding equal-length period",items=await r.ProductTrendsAsync(T(h),period,top??50,ct,productGlobalId,categoryGlobalId)});
 });
+
+app.MapPost(
+    "/api/internal/inventory-central/transfers",
+    async (
+        HttpRequest httpRequest,
+        CentralTransferInRequest request,
+        ICentralInventoryTransferService service,
+        IConfiguration configuration,
+        CancellationToken cancellationToken) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(
+                httpRequest,
+                configuration))
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await service.ReceiveAsync(
+                request,
+                cancellationToken);
+
+            return Results.Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                error = exception.Message
+            });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.BadRequest(new
+            {
+                error = exception.Message
+            });
+        }
+    });
 
 app.Run();
 
