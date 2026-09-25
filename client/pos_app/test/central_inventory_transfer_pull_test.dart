@@ -36,7 +36,9 @@ void main() {
     expect(await fixture.repository.currentPullCursor(), 1);
   });
 
-  test('central transfer for another branch is consumed without stock', () async {
+  test(
+    'central transfer for another branch is consumed without stock',
+    () async {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
     final change = fixture.change(cursor: 1, branchGlobalId: 'branch-2');
@@ -45,8 +47,9 @@ void main() {
 
     expect(await fixture.count('inventory_lots'), 0);
     expect(await fixture.count('inventory_movements'), 0);
-    expect(await fixture.repository.currentPullCursor(), 1);
-  });
+      expect(await fixture.repository.currentPullCursor(), 1);
+    },
+  );
 
   test('invalid central transfer rolls back stock and cursor', () async {
     final fixture = await _Fixture.create();
