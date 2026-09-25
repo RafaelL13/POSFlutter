@@ -51,6 +51,22 @@ void main() {
     },
   );
 
+
+  test('fractional central transfer quantity is rejected without mutation', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final change = fixture.change(cursor: 1, quantity: 7.5);
+
+    await expectLater(
+      fixture.repository.applyPullBatch(fixture.batch(change)),
+      throwsStateError,
+    );
+
+    expect(await fixture.count('inventory_lots'), 0);
+    expect(await fixture.count('inventory_movements'), 0);
+    expect(await fixture.repository.currentPullCursor(), 0);
+  });
+
   test('invalid central transfer rolls back stock and cursor', () async {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
@@ -142,6 +158,7 @@ final class _Fixture {
     required int cursor,
     String branchGlobalId = 'branch-1',
     String productGlobalId = 'product-1',
+    num quantity = 7,
   }) => SyncPullChange(
     cursor: cursor,
     entityType: 'CentralTransferIn',
@@ -159,7 +176,7 @@ final class _Fixture {
         {
           'productGlobalId': productGlobalId,
           'lotGlobalId': 'central-lot-1',
-          'quantity': 7,
+          'quantity': quantity,
           'unitCostCents': 1234,
         },
       ],
