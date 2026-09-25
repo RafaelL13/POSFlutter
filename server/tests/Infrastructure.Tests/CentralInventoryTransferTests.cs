@@ -102,6 +102,70 @@ public sealed class CentralInventoryTransferTests
     }
 
     [Fact]
+    public async Task Published_transfer_is_pullable_with_exact_contract()
+    {
+        await using var t = await TestDatabase.CreateAsync();
+        var tenant = await t.SeedTenantAsync();
+        var product = new Product
+        {
+            GlobalId = Guid.NewGuid(),
+            BusinessId = tenant.Business.Id,
+            Code = "CENTRAL-PULL",
+            Name = "Central pull product",
+            Presentation = "Piece",
+            Active = true,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        t.Db.Products.Add(product);
+        await t.Db.SaveChangesAsync();
+
+        var transferId = Guid.NewGuid();
+        var lotId = Guid.NewGuid();
+        var date = DateTimeOffset.Parse("2026-09-25T02:00:00Z");
+        var service = new CentralInventoryTransferService(t.Db);
+        await service.ReceiveAsync(
+            new CentralTransferInRequest(
+                transferId,
+                tenant.Business.GlobalId,
+                tenant.Branch.GlobalId,
+                date,
+                [new CentralTransferInLine(product.GlobalId, lotId, 5, 987)]),
+            CancellationToken.None);
+
+        var sync = new SyncService(t.Db);
+        var context = new SyncTenantContext(
+            tenant.Business.Id,
+            tenant.Business.GlobalId,
+            tenant.Branch.Id,
+            tenant.Branch.GlobalId,
+            tenant.Device.Id,
+            tenant.Device.GlobalId,
+            tenant.User.Id,
+            tenant.User.GlobalId,
+            tenant.User.Role,
+            tenant.Device.Mode);
+
+        var pull = await sync.PullAsync(0, 200, context, CancellationToken.None);
+        var change = Assert.Single(pull.Changes.Where(x =>
+            x.EntityType == "CentralTransferIn" &&
+            x.EntityGlobalId == transferId));
+
+        Assert.Equal("Create", change.Operation);
+        Assert.Equal(1, change.Version);
+        var payload = change.Payload;
+        Assert.Equal(transferId, payload.GetProperty("globalId").GetGuid());
+        Assert.Equal(tenant.Business.GlobalId, payload.GetProperty("businessGlobalId").GetGuid());
+        Assert.Equal(tenant.Branch.GlobalId, payload.GetProperty("branchGlobalId").GetGuid());
+        Assert.Equal(date, payload.GetProperty("date").GetDateTimeOffset());
+        var lines = payload.GetProperty("lines");
+        Assert.Equal(1, lines.GetArrayLength());
+        Assert.Equal(product.GlobalId, lines[0].GetProperty("productGlobalId").GetGuid());
+        Assert.Equal(lotId, lines[0].GetProperty("lotGlobalId").GetGuid());
+        Assert.Equal(5, lines[0].GetProperty("quantity").GetInt32());
+        Assert.Equal(987, lines[0].GetProperty("unitCostCents").GetInt64());
+    }
+
+    [Fact]
     public async Task Invalid_transfer_does_not_mutate_inventory()
     {
         await using var t = await TestDatabase.CreateAsync();
