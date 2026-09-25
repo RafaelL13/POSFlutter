@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
