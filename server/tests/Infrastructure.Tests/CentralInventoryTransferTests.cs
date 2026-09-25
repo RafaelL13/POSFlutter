@@ -50,6 +50,25 @@ public sealed class CentralInventoryTransferTests
         Assert.Equal(tenant.User.Id, movement.UserId);
         Assert.Equal(tenant.Device.Id, movement.DeviceId);
         Assert.Single(await t.Db.CentralInventoryTransferReceipts.Where(x => x.TransferGlobalId == transferId).ToListAsync());
+
+        var syncChange = await t.Db.SyncChanges.SingleAsync(x =>
+            x.BusinessId == tenant.Business.Id &&
+            x.EntityType == "CentralTransferIn" &&
+            x.EntityGlobalId == transferId);
+        Assert.Equal("Create", syncChange.Operation);
+        Assert.Equal(1, syncChange.Version);
+        using var syncPayload = System.Text.Json.JsonDocument.Parse(syncChange.PayloadJson);
+        var root = syncPayload.RootElement;
+        Assert.Equal(transferId, root.GetProperty("globalId").GetGuid());
+        Assert.Equal(tenant.Business.GlobalId, root.GetProperty("businessGlobalId").GetGuid());
+        Assert.Equal(tenant.Branch.GlobalId, root.GetProperty("branchGlobalId").GetGuid());
+        Assert.Equal(1, root.GetProperty("serverVersion").GetInt64());
+        var lines = root.GetProperty("lines");
+        Assert.Equal(1, lines.GetArrayLength());
+        Assert.Equal(product.GlobalId, lines[0].GetProperty("productGlobalId").GetGuid());
+        Assert.Equal(lotId, lines[0].GetProperty("lotGlobalId").GetGuid());
+        Assert.Equal(7, lines[0].GetProperty("quantity").GetInt32());
+        Assert.Equal(1234, lines[0].GetProperty("unitCostCents").GetInt64());
     }
 
     [Fact]
@@ -77,6 +96,9 @@ public sealed class CentralInventoryTransferTests
         Assert.Single(await t.Db.InventoryLots.Where(x => x.ProductGlobalId == product.GlobalId).ToListAsync());
         Assert.Single(await t.Db.InventoryMovements.Where(x => x.ReferenceGlobalId == request.TransferGlobalId).ToListAsync());
         Assert.Single(await t.Db.CentralInventoryTransferReceipts.Where(x => x.TransferGlobalId == request.TransferGlobalId).ToListAsync());
+        Assert.Single(await t.Db.SyncChanges.Where(x =>
+            x.EntityType == "CentralTransferIn" &&
+            x.EntityGlobalId == request.TransferGlobalId).ToListAsync());
     }
 
     [Fact]
