@@ -150,7 +150,8 @@ public sealed class CentralInventoryTransferService(PosDbContext db) : ICentralI
                         request.BranchGlobalId,
                         request.Date,
                         1,
-                        request.Lines)),
+                        request.Lines),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)),
                 CreatedAt = DateTimeOffset.UtcNow
             });
             await _db.SaveChangesAsync(cancellationToken);
