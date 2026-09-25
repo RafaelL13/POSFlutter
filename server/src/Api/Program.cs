@@ -197,6 +197,46 @@ reportApi.MapGet("/trends/products",async(DateTimeOffset? from,DateTimeOffset? t
  return Results.Ok(new{stableThresholdPercent=5.0,comparison="current period versus immediately preceding equal-length period",items=await r.ProductTrendsAsync(T(h),period,top??50,ct,productGlobalId,categoryGlobalId)});
 });
 
+app.MapPost(
+    "/api/internal/inventory-central/transfers",
+    async (
+        HttpRequest httpRequest,
+        CentralTransferInRequest request,
+        ICentralInventoryTransferService service,
+        IConfiguration configuration,
+        CancellationToken cancellationToken) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(
+                httpRequest,
+                configuration))
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await service.ReceiveAsync(
+                request,
+                cancellationToken);
+
+            return Results.Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                error = exception.Message
+            });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.BadRequest(new
+            {
+                error = exception.Message
+            });
+        }
+    });
+
 app.Run();
 
 static bool TryReportPeriod(DateTimeOffset? from,DateTimeOffset? to,out ReportPeriod period)

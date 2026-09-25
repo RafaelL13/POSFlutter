@@ -181,4 +181,98 @@ public sealed class CentralInventoryTransferTests
         Assert.Empty(await t.Db.InventoryMovements.ToListAsync());
         Assert.Empty(await t.Db.CentralInventoryTransferReceipts.ToListAsync());
     }
+
+    [Fact]
+    public async Task Concurrent_same_transfer_is_idempotent_on_sql_server()
+    {
+        await using var t = await SqlServerTestDatabase.CreateAsync();
+        var tenant = await t.SeedTenantAsync("CENTRAL-RACE");
+
+        var product = new Product
+        {
+            GlobalId = Guid.NewGuid(),
+            BusinessId = tenant.Business.Id,
+            Code = "CENTRAL-RACE",
+            Name = "Central race product",
+            Presentation = "Piece",
+            Active = true,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        t.Db.Products.Add(product);
+        await t.Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var request = new CentralTransferInRequest(
+            Guid.NewGuid(),
+            tenant.Business.GlobalId,
+            tenant.Branch.GlobalId,
+            DateTimeOffset.UtcNow,
+            [
+                new CentralTransferInLine(
+                    product.GlobalId,
+                    Guid.NewGuid(),
+                    4,
+                    725)
+            ]);
+
+        await using var dbA = t.CreateDbContext();
+        await using var dbB = t.CreateDbContext();
+
+        var serviceA = new CentralInventoryTransferService(dbA);
+        var serviceB = new CentralInventoryTransferService(dbB);
+
+        using var gate = new Barrier(2);
+
+        async Task<CentralTransferInResult> ReceiveAsync(
+            CentralInventoryTransferService service)
+        {
+            await Task.Yield();
+            gate.SignalAndWait(TimeSpan.FromSeconds(10));
+
+            return await service.ReceiveAsync(
+                request,
+                CancellationToken.None);
+        }
+
+        var taskA = ReceiveAsync(serviceA);
+        var taskB = ReceiveAsync(serviceB);
+
+        var results = await Task.WhenAll(taskA, taskB);
+
+        Assert.Equal(2, results.Length);
+        Assert.All(results, result => Assert.True(result.Succeeded));
+        Assert.Single(results, result => !result.AlreadyReceived);
+        Assert.Single(results, result => result.AlreadyReceived);
+
+        await using var verify = t.CreateDbContext();
+
+        Assert.Single(
+            await verify.InventoryLots
+                .Where(x =>
+                    x.BusinessId == tenant.Business.Id &&
+                    x.ProductGlobalId == product.GlobalId)
+                .ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Single(
+            await verify.InventoryMovements
+                .Where(x =>
+                    x.BusinessId == tenant.Business.Id &&
+                    x.ReferenceGlobalId == request.TransferGlobalId)
+                .ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Single(
+            await verify.CentralInventoryTransferReceipts
+                .Where(x =>
+                    x.BusinessId == tenant.Business.Id &&
+                    x.TransferGlobalId == request.TransferGlobalId)
+                .ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Single(
+            await verify.SyncChanges
+                .Where(x =>
+                    x.BusinessId == tenant.Business.Id &&
+                    x.EntityType == "CentralTransferIn" &&
+                    x.EntityGlobalId == request.TransferGlobalId)
+                .ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
 }

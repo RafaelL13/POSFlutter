@@ -158,9 +158,31 @@ public sealed class CentralInventoryTransferService(PosDbContext db) : ICentralI
             await transaction.CommitAsync(cancellationToken);
             return new CentralTransferInResult(true, false, receipt.Id.ToString());
         }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            _db.ChangeTracker.Clear();
+
+            var concurrentReceipt = await _db.CentralInventoryTransferReceipts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    x => x.BusinessId == business.Id &&
+                         x.TransferGlobalId == request.TransferGlobalId,
+                    CancellationToken.None);
+
+            if (concurrentReceipt is not null)
+            {
+                return new CentralTransferInResult(
+                    true,
+                    true,
+                    concurrentReceipt.Id.ToString());
+            }
+
+            throw;
+        }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
     }
