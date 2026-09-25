@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Pos.Application;
 using Pos.Domain;
@@ -135,6 +136,23 @@ public sealed class CentralInventoryTransferService(PosDbContext db) : ICentralI
                 ReceivedAt = DateTimeOffset.UtcNow
             };
             _db.CentralInventoryTransferReceipts.Add(receipt);
+            _db.SyncChanges.Add(new SyncChange
+            {
+                BusinessId = business.Id,
+                EntityType = "CentralTransferIn",
+                EntityGlobalId = request.TransferGlobalId,
+                Operation = "Create",
+                Version = 1,
+                PayloadJson = JsonSerializer.Serialize(
+                    new CentralTransferInPullPayload(
+                        request.TransferGlobalId,
+                        request.BusinessGlobalId,
+                        request.BranchGlobalId,
+                        request.Date,
+                        1,
+                        request.Lines)),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return new CentralTransferInResult(true, false, receipt.Id.ToString());
