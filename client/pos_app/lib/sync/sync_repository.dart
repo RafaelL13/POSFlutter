@@ -592,11 +592,13 @@ final class SyncRepository {
         throw StateError('El lote remoto ya existe con otra procedencia.');
       }
 
-      final before = stockByProduct[productId] ??
+      final before =
+          stockByProduct[productId] ??
           ((await tx.rawQuery(
-            'SELECT COALESCE(SUM(available_quantity),0) s FROM inventory_lots WHERE product_id=? AND branch_id=? AND active=1',
-            [productId, context.branchId],
-          )).single['s'] as int);
+                'SELECT COALESCE(SUM(available_quantity),0) s FROM inventory_lots WHERE product_id=? AND branch_id=? AND active=1',
+                [productId, context.branchId],
+              )).single['s']
+              as int);
       final after = before + quantity;
       stockByProduct[productId] = after;
 
