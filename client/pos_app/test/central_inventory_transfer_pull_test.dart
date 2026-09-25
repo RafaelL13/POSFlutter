@@ -39,14 +39,14 @@ void main() {
   test(
     'central transfer for another branch is consumed without stock',
     () async {
-    final fixture = await _Fixture.create();
-    addTearDown(fixture.dispose);
-    final change = fixture.change(cursor: 1, branchGlobalId: 'branch-2');
+      final fixture = await _Fixture.create();
+      addTearDown(fixture.dispose);
+      final change = fixture.change(cursor: 1, branchGlobalId: 'branch-2');
 
-    await fixture.repository.applyPullBatch(fixture.batch(change));
+      await fixture.repository.applyPullBatch(fixture.batch(change));
 
-    expect(await fixture.count('inventory_lots'), 0);
-    expect(await fixture.count('inventory_movements'), 0);
+      expect(await fixture.count('inventory_lots'), 0);
+      expect(await fixture.count('inventory_movements'), 0);
       expect(await fixture.repository.currentPullCursor(), 1);
     },
   );
