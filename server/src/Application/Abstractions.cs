@@ -11,3 +11,9 @@ public interface ITokenService
     Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
     Task<AuthResponse?> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken);
 }
+
+
+public interface ICentralInventoryTransferService
+{
+    Task<CentralTransferInResult> ReceiveAsync(CentralTransferInRequest request, CancellationToken cancellationToken);
+}
