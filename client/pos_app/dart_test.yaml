@@ -1,0 +1,3 @@
+# POS tests share sqflite_common_ffi database state.
+# Serialize test suites to prevent cross-suite SQLite races.
+concurrency: 1
