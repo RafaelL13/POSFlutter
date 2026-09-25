@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:pos_app/features/catalog_import/presentation/product_import_file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
@@ -202,17 +202,14 @@ class _ProductImportScreenState extends State<ProductImportScreen> {
       if (injectedPicker != null) {
         selected = await injectedPicker();
       } else {
-        final file = await FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: const ['csv', 'xlsx'],
-        );
+        final file = await const NativeSafProductImportFilePicker().pickFile();
 
         if (file == null) {
           selected = null;
         } else {
           selected = ProductImportSelectedFile(
             name: file.name,
-            bytes: await file.readAsBytes(),
+            bytes: file.bytes,
           );
         }
       }
