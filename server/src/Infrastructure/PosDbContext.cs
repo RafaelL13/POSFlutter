@@ -8,6 +8,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<Business> Businesses => Set<Business>(); public DbSet<Branch> Branches => Set<Branch>(); public DbSet<Device> Devices => Set<Device>(); public DbSet<UserAccount> Users => Set<UserAccount>();
     public DbSet<Category> Categories => Set<Category>(); public DbSet<Supplier> Suppliers => Set<Supplier>(); public DbSet<Product> Products => Set<Product>(); public DbSet<Purchase> Purchases => Set<Purchase>(); public DbSet<PurchaseLine> PurchaseLines => Set<PurchaseLine>();
     public DbSet<InventoryLot> InventoryLots => Set<InventoryLot>(); public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>(); public DbSet<Sale> Sales => Set<Sale>(); public DbSet<SaleLine> SaleLines => Set<SaleLine>(); public DbSet<SaleLotAllocation> SaleLotAllocations => Set<SaleLotAllocation>(); public DbSet<SalePayment> SalePayments => Set<SalePayment>();
+    public DbSet<CentralInventoryTransferReceipt> CentralInventoryTransferReceipts => Set<CentralInventoryTransferReceipt>();
     public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<CashMovement> CashMovements => Set<CashMovement>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -42,6 +43,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             });
         });
         b.Entity<Expense>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); e.ToTable(t=>t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
+        b.Entity<CentralInventoryTransferReceipt>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.TransferGlobalId}).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.BranchId,x.ReceivedAt}); });
         b.Entity<InboundOperation>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.OperationGlobalId}).IsUnique(); });
         b.Entity<SyncChange>(e => { e.HasKey(x=>x.Id); e.Property(x=>x.Id).ValueGeneratedOnAdd(); e.HasIndex(x=>new{x.BusinessId,x.Id}); });
         b.Entity<RefreshToken>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.TokenHash).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.UserId,x.DeviceId}); });
