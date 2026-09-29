@@ -1,6 +1,41 @@
+import 'dart:convert';
+
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
 import 'package:pos_app/database/app_database.dart';
+
+enum CentralTransferHistoryStatus {
+  pendingAck,
+  syncing,
+  retrying,
+  attentionRequired,
+  confirmed,
+  localOnly,
+}
+
+final class CentralTransferHistoryItem {
+  const CentralTransferHistoryItem({
+    required this.transferGlobalId,
+    required this.transferDate,
+    required this.productCount,
+    required this.totalQuantity,
+    required this.status,
+    required this.retryCount,
+    this.appliedAt,
+    this.errorCategory,
+    this.nextAttemptAt,
+  });
+
+  final String transferGlobalId;
+  final DateTime transferDate;
+  final int productCount;
+  final int totalQuantity;
+  final CentralTransferHistoryStatus status;
+  final int retryCount;
+  final DateTime? appliedAt;
+  final String? errorCategory;
+  final DateTime? nextAttemptAt;
+}
 
 final class InventoryReadRepository {
   InventoryReadRepository(this._db);
@@ -50,6 +85,150 @@ final class InventoryReadRepository {
       whereArgs: [context.branchId, ?productId],
       orderBy: 'entry_date, id',
     );
+  }
+
+  Future<List<CentralTransferHistoryItem>> centralTransferHistory({
+    int limit = 50,
+  }) async {
+    final authorization = await AuthorizationService(_db)
+        .require(Capability.inventoryAvailabilityRead);
+    final context = authorization.context!;
+    final database = await _db.open();
+    final safeLimit = limit.clamp(1, 200);
+
+    final movementRows = await database.rawQuery(
+      '''
+      SELECT
+        reference_global_id AS transfer_global_id,
+        MIN(movement_date) AS transfer_date,
+        COUNT(DISTINCT product_id) AS product_count,
+        SUM(quantity_delta) AS total_quantity
+      FROM inventory_movements
+      WHERE branch_id = ?
+        AND type = 'CentralTransferIn'
+        AND reference_global_id IS NOT NULL
+      GROUP BY reference_global_id
+      ORDER BY transfer_date DESC, transfer_global_id DESC
+      LIMIT ?
+      ''',
+      [context.branchId, safeLimit],
+    );
+
+    if (movementRows.isEmpty) {
+      return const <CentralTransferHistoryItem>[];
+    }
+
+    final ackRows = await database.query(
+      'sync_queue',
+      columns: [
+        'id',
+        'status',
+        'payload_json',
+        'retry_count',
+        'error_category',
+        'requires_action',
+        'next_attempt_at',
+      ],
+      where: 'entity_type = ?',
+      whereArgs: ['CentralTransferApplied'],
+      orderBy: 'id DESC',
+    );
+
+    final ackByTransfer = <String, Map<String, Object?>>{};
+
+    for (final row in ackRows) {
+      final payload = _decodeCentralTransferAck(row['payload_json'] as String);
+
+      final transferGlobalId = payload['transferGlobalId'];
+
+      if (transferGlobalId is! String || transferGlobalId.trim().isEmpty) {
+        throw StateError('CentralTransferApplied sin transferGlobalId válido.');
+      }
+
+      ackByTransfer.putIfAbsent(transferGlobalId, () => row);
+    }
+
+    return movementRows
+        .map((row) {
+          final transferGlobalId = row['transfer_global_id'] as String;
+
+          final ack = ackByTransfer[transferGlobalId];
+          final ackPayload = ack == null
+              ? null
+              : _decodeCentralTransferAck(ack['payload_json'] as String);
+
+          return CentralTransferHistoryItem(
+            transferGlobalId: transferGlobalId,
+            transferDate: DateTime.parse(row['transfer_date'] as String)
+                .toUtc(),
+            productCount: row['product_count'] as int,
+            totalQuantity: row['total_quantity'] as int,
+            status: _centralTransferHistoryStatus(ack),
+            retryCount: ack?['retry_count'] as int? ?? 0,
+            appliedAt: _optionalUtcDate(
+              ackPayload?['appliedAt'],
+              field: 'appliedAt',
+            ),
+            errorCategory: ack?['error_category'] as String?,
+            nextAttemptAt: _optionalUtcDate(
+              ack?['next_attempt_at'],
+              field: 'next_attempt_at',
+            ),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  static Map<String, Object?> _decodeCentralTransferAck(String payloadJson) {
+    final decoded = jsonDecode(payloadJson);
+
+    if (decoded is! Map) {
+      throw StateError('Payload CentralTransferApplied inválido.');
+    }
+
+    return Map<String, Object?>.from(decoded);
+  }
+
+  static CentralTransferHistoryStatus _centralTransferHistoryStatus(
+    Map<String, Object?>? ack,
+  ) {
+    if (ack == null) {
+      return CentralTransferHistoryStatus.localOnly;
+    }
+
+    final status = ack['status'];
+
+    return switch (status) {
+      'Pending' => CentralTransferHistoryStatus.pendingAck,
+      'Syncing' => CentralTransferHistoryStatus.syncing,
+      'Synced' => CentralTransferHistoryStatus.confirmed,
+      'Error' =>
+        (ack['requires_action'] as int? ?? 0) == 1 ||
+                ack['next_attempt_at'] == null
+            ? CentralTransferHistoryStatus.attentionRequired
+            : CentralTransferHistoryStatus.retrying,
+      _ => throw StateError(
+        'Estado CentralTransferApplied no soportado: $status.',
+      ),
+    };
+  }
+
+  static DateTime? _optionalUtcDate(Object? value, {required String field}) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is! String) {
+      throw StateError('$field de CentralTransferApplied es inválido.');
+    }
+
+    final parsed = DateTime.tryParse(value);
+
+    if (parsed == null) {
+      throw StateError('$field de CentralTransferApplied es inválido.');
+    }
+
+    return parsed.toUtc();
   }
 
   Future<int> inventoryValueCents() async {

@@ -10,6 +10,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<InventoryLot> InventoryLots => Set<InventoryLot>(); public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>(); public DbSet<Sale> Sales => Set<Sale>(); public DbSet<SaleLine> SaleLines => Set<SaleLine>(); public DbSet<SaleLotAllocation> SaleLotAllocations => Set<SaleLotAllocation>(); public DbSet<SalePayment> SalePayments => Set<SalePayment>();
     public DbSet<InitialInventory> InitialInventories => Set<InitialInventory>(); public DbSet<InitialInventoryLine> InitialInventoryLines => Set<InitialInventoryLine>();
     public DbSet<CentralInventoryTransferReceipt> CentralInventoryTransferReceipts => Set<CentralInventoryTransferReceipt>();
+    public DbSet<CentralInventoryTransferApplication> CentralInventoryTransferApplications => Set<CentralInventoryTransferApplication>();
     public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<CashMovement> CashMovements => Set<CashMovement>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -28,6 +29,13 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         b.Entity<InitialInventory>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.BranchId,x.SourceFingerprint}).IsUnique(); e.HasMany(x=>x.Lines).WithOne().HasForeignKey(x=>x.InitialInventoryId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<InitialInventoryLine>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.HasIndex(x=>new{x.InitialInventoryId,x.ProductGlobalId}).IsUnique(); e.ToTable(t=>t.HasCheckConstraint("CK_InitialInventoryLine_Quantity", "[Quantity] > 0")); });
         b.Entity<CentralInventoryTransferReceipt>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.TransferGlobalId}).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.BranchId,x.ReceivedAt}); });
+        b.Entity<CentralInventoryTransferApplication>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.GlobalId).IsUnique();
+            e.HasIndex(x => new { x.BusinessId, x.TransferGlobalId, x.DeviceId }).IsUnique();
+            e.HasIndex(x => new { x.BusinessId, x.BranchId, x.AcknowledgedAt });
+        });
         b.Entity<Sale>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>new{x.BusinessId,x.GlobalId}).IsUnique(); e.HasIndex(x=>new{x.BusinessId,x.IdempotencyKey}).IsUnique(); e.HasMany(x=>x.Lines).WithOne().HasForeignKey(x=>x.SaleId).OnDelete(DeleteBehavior.Cascade); e.HasMany(x=>x.Payments).WithOne().HasForeignKey(x=>x.SaleId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<SaleLine>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.HasMany(x=>x.Lots).WithOne().HasForeignKey(x=>x.SaleLineId).OnDelete(DeleteBehavior.Cascade); e.ToTable(t=>t.HasCheckConstraint("CK_SaleLine_Qty", "[Quantity] > 0")); });
         b.Entity<SaleLotAllocation>(e => { e.HasKey(x=>x.Id); e.HasIndex(x=>x.GlobalId).IsUnique(); e.ToTable(t=>t.HasCheckConstraint("CK_SaleLot_Qty", "[Quantity] > 0")); });

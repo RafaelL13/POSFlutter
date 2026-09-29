@@ -163,17 +163,47 @@ final class SyncRepository {
     });
   }
 
-  Future<List<SyncOperationRecord>> nextBatch({int limit = 50}) async {
+  Future<int> currentQueueMaxId() async {
+    await AuthorizationService(_database).require(Capability.syncPush);
+    final db = await _database.open();
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(MAX(id), 0) AS max_id FROM sync_queue',
+    );
+    return rows.single['max_id']! as int;
+  }
+
+  Future<List<SyncOperationRecord>> nextBatch({
+    int limit = 50,
+    int? idGreaterThan,
+    String? entityType,
+  }) async {
     await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     final now = DateTime.now().toUtc().toIso8601String();
+
+    final where = <String>[
+      "(status = 'Pending' OR (status = 'Error' AND next_attempt_at IS NOT NULL AND next_attempt_at <= ?))",
+    ];
+    final whereArgs = <Object?>[now];
+
+    if (idGreaterThan != null) {
+      where.add('id > ?');
+      whereArgs.add(idGreaterThan);
+    }
+
+    if (entityType != null) {
+      where.add('entity_type = ?');
+      whereArgs.add(entityType);
+    }
+
     final rows = await db.query(
       'sync_queue',
-      where: "status = 'Pending' OR (status = 'Error' AND next_attempt_at IS NOT NULL AND next_attempt_at <= ?)",
-      whereArgs: [now],
+      where: where.join(' AND '),
+      whereArgs: whereArgs,
       orderBy: 'id ASC',
       limit: limit.clamp(1, 100),
     );
+
     return rows.map(SyncOperationRecord.fromRow).toList(growable: false);
   }
 
@@ -627,6 +657,28 @@ final class SyncRepository {
         'user_id': context.userId,
         'device_id': context.deviceId,
         'notes': 'InventarioCentral',
+      });
+    }
+
+    if (!context.isAdminReadOnly) {
+      final ackGlobalId = _ids.newId();
+      final appliedAt = DateTime.now().toUtc().toIso8601String();
+
+      await tx.insert('sync_queue', {
+        'global_id': ackGlobalId,
+        'entity_type': 'CentralTransferApplied',
+        'entity_global_id': ackGlobalId,
+        'operation': 'Create',
+        'payload_version': 1,
+        'payload_json': jsonEncode({
+          'globalId': ackGlobalId,
+          'transferGlobalId': change.entityGlobalId,
+          'businessGlobalId': context.businessGlobalId,
+          'branchGlobalId': context.branchGlobalId,
+          'deviceGlobalId': context.deviceGlobalId,
+          'appliedAt': appliedAt,
+        }),
+        'created_at': appliedAt,
       });
     }
   }

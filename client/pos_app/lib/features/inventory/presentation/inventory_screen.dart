@@ -77,6 +77,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         label: const Text('Registrar compra o entrada'),
                       ),
                     ],
+                    TextButton.icon(
+                      onPressed: _showCentralTransferHistory,
+                      icon: const Icon(Icons.move_to_inbox_outlined),
+                      label: const Text('Transferencias recibidas'),
+                    ),
                   ],
                 ),
               ),
@@ -129,6 +134,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ],
     ),
   );
+
+  Future<void> _showCentralTransferHistory() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => CentralTransferHistoryDialog(
+        loader: () =>
+            InventoryReadRepository(appDatabase).centralTransferHistory(),
+      ),
+    );
+  }
 
   Future<void> _adjust() async {
     setState(() => _saving = true);
@@ -248,6 +263,168 @@ class _InventoryRow extends StatelessWidget {
       },
     );
   }
+}
+
+class CentralTransferHistoryDialog extends StatefulWidget {
+  const CentralTransferHistoryDialog({super.key, required this.loader});
+
+  final Future<List<CentralTransferHistoryItem>> Function() loader;
+
+  @override
+  State<CentralTransferHistoryDialog> createState() =>
+      _CentralTransferHistoryDialogState();
+}
+
+class _CentralTransferHistoryDialogState
+    extends State<CentralTransferHistoryDialog> {
+  late Future<List<CentralTransferHistoryItem>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.loader();
+  }
+
+  void _reload() {
+    setState(() => _future = widget.loader());
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Row(
+      children: [
+        Icon(Icons.move_to_inbox_outlined),
+        SizedBox(width: AppSpacing.sm),
+        Expanded(child: Text('Transferencias recibidas')),
+      ],
+    ),
+    content: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 720, maxHeight: 520),
+      child: SizedBox(
+        width: double.maxFinite,
+        height: 420,
+        child: FutureBuilder<List<CentralTransferHistoryItem>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return AppErrorState(onRetry: _reload);
+            }
+
+            if (!snapshot.hasData) {
+              return const AppLoadingState(label: 'Cargando transferencias…');
+            }
+
+            final rows = snapshot.data!;
+
+            if (rows.isEmpty) {
+              return const AppEmptyState(
+                icon: Icons.move_to_inbox_outlined,
+                message: 'No hay transferencias centrales recibidas en esta sucursal.',
+              );
+            }
+
+            return ListView.separated(
+              itemCount: rows.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, index) =>
+                  _CentralTransferHistoryRow(item: rows[index]),
+            );
+          },
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cerrar'),
+      ),
+    ],
+  );
+}
+
+class _CentralTransferHistoryRow extends StatelessWidget {
+  const _CentralTransferHistoryRow({required this.item});
+
+  final CentralTransferHistoryItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final presentation = _presentationFor(item.status);
+    final localDate = item.transferDate.toLocal();
+    final shortId = item.transferGlobalId.length <= 8
+        ? item.transferGlobalId
+        : item.transferGlobalId.substring(0, 8);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Transferencia $shortId',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              AppStatusChip(
+                label: presentation.label,
+                status: presentation.status,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.xxs,
+            children: [
+              Text(DateFormat('dd/MM/yyyy HH:mm').format(localDate)),
+              Text('${item.productCount} productos'),
+              Text('${item.totalQuantity} unidades'),
+              if (item.retryCount > 0) Text('Reintentos: ${item.retryCount}'),
+            ],
+          ),
+          if (item.errorCategory != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Sincronización: ${item.errorCategory}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static ({String label, AppStatus status}) _presentationFor(
+    CentralTransferHistoryStatus status,
+  ) => switch (status) {
+    CentralTransferHistoryStatus.confirmed => (
+      label: 'Confirmada',
+      status: AppStatus.active,
+    ),
+    CentralTransferHistoryStatus.pendingAck => (
+      label: 'Pendiente de envío',
+      status: AppStatus.warning,
+    ),
+    CentralTransferHistoryStatus.syncing => (
+      label: 'Enviando',
+      status: AppStatus.warning,
+    ),
+    CentralTransferHistoryStatus.retrying => (
+      label: 'Reintentando',
+      status: AppStatus.warning,
+    ),
+    CentralTransferHistoryStatus.attentionRequired => (
+      label: 'Requiere atención',
+      status: AppStatus.warning,
+    ),
+    CentralTransferHistoryStatus.localOnly => (
+      label: 'Aplicada localmente',
+      status: AppStatus.warning,
+    ),
+  };
 }
 
 class _AdjustmentDraft {

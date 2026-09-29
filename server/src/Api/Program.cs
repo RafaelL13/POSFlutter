@@ -197,6 +197,109 @@ reportApi.MapGet("/trends/products",async(DateTimeOffset? from,DateTimeOffset? t
  return Results.Ok(new{stableThresholdPercent=5.0,comparison="current period versus immediately preceding equal-length period",items=await r.ProductTrendsAsync(T(h),period,top??50,ct,productGlobalId,categoryGlobalId)});
 });
 
+app.MapGet(
+    "/api/internal/inventory-central/stock",
+    async (
+        HttpRequest httpRequest,
+        Guid businessGlobalId,
+        Guid branchGlobalId,
+        Pos.Infrastructure.PosDbContext db,
+        IConfiguration configuration,
+        CancellationToken cancellationToken) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(
+                httpRequest,
+                configuration))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (businessGlobalId == Guid.Empty ||
+            branchGlobalId == Guid.Empty)
+        {
+            return Results.BadRequest(new
+            {
+                error = "BusinessGlobalId and BranchGlobalId are required."
+            });
+        }
+
+        var business =
+            await db.Businesses
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    x =>
+                        x.GlobalId == businessGlobalId &&
+                        x.Active,
+                    cancellationToken);
+
+        if (business is null)
+        {
+            return Results.NotFound(new
+            {
+                error = "Business was not found."
+            });
+        }
+
+        var branch =
+            await db.Branches
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    x =>
+                        x.BusinessId == business.Id &&
+                        x.GlobalId == branchGlobalId &&
+                        x.Active,
+                    cancellationToken);
+
+        if (branch is null)
+        {
+            return Results.NotFound(new
+            {
+                error = "Branch was not found."
+            });
+        }
+
+        var items =
+            await (
+                from lot in db.InventoryLots.AsNoTracking()
+                join product in db.Products.AsNoTracking()
+                    on new
+                    {
+                        lot.BusinessId,
+                        ProductGlobalId = lot.ProductGlobalId
+                    }
+                    equals new
+                    {
+                        product.BusinessId,
+                        ProductGlobalId = product.GlobalId
+                    }
+                where
+                    lot.BusinessId == business.Id &&
+                    lot.BranchId == branch.Id &&
+                    lot.Active &&
+                    lot.AvailableQuantity > 0 &&
+                    product.Active
+                group lot by lot.ProductGlobalId
+                into productLots
+                orderby productLots.Key
+                select new
+                {
+                    productGlobalId =
+                        productLots.Key,
+
+                    quantity =
+                        productLots.Sum(
+                            x => x.AvailableQuantity)
+                })
+                .ToListAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            businessGlobalId,
+            branchGlobalId,
+            readOnly = true,
+            items
+        });
+    });
 app.MapPost(
     "/api/internal/inventory-central/transfers",
     async (

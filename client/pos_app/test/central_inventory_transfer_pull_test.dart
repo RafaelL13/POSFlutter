@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/sync/sync_pull.dart';
@@ -33,6 +35,32 @@ void main() {
     expect(movements, hasLength(1));
     expect(movements.single['previous_stock'], 0);
     expect(movements.single['new_stock'], 7);
+
+    final acknowledgements = await fixture.db.query(
+      'sync_queue',
+      where: 'entity_type=? AND operation=?',
+      whereArgs: ['CentralTransferApplied', 'Create'],
+    );
+
+    expect(acknowledgements, hasLength(1));
+
+    final acknowledgement = acknowledgements.single;
+
+    expect(acknowledgement['status'], 'Pending');
+    expect(acknowledgement['payload_version'], 1);
+    expect(acknowledgement['entity_global_id'], acknowledgement['global_id']);
+
+    final payload = jsonDecode(
+      acknowledgement['payload_json']! as String,
+    ) as Map<String, dynamic>;
+
+    expect(payload['globalId'], acknowledgement['global_id']);
+    expect(payload['transferGlobalId'], 'transfer-1');
+    expect(payload['businessGlobalId'], 'business-1');
+    expect(payload['branchGlobalId'], 'branch-1');
+    expect(payload['deviceGlobalId'], 'device-1');
+    expect(payload['appliedAt'], isNotNull);
+
     expect(await fixture.repository.currentPullCursor(), 1);
   });
 
@@ -47,10 +75,10 @@ void main() {
 
       expect(await fixture.count('inventory_lots'), 0);
       expect(await fixture.count('inventory_movements'), 0);
+      expect(await fixture.countAck(), 0);
       expect(await fixture.repository.currentPullCursor(), 1);
     },
   );
-
 
   test(
     'fractional central transfer quantity is rejected without mutation',
@@ -66,6 +94,7 @@ void main() {
 
       expect(await fixture.count('inventory_lots'), 0);
       expect(await fixture.count('inventory_movements'), 0);
+      expect(await fixture.countAck(), 0);
       expect(await fixture.repository.currentPullCursor(), 0);
     },
   );
@@ -82,8 +111,26 @@ void main() {
 
     expect(await fixture.count('inventory_lots'), 0);
     expect(await fixture.count('inventory_movements'), 0);
+    expect(await fixture.countAck(), 0);
     expect(await fixture.repository.currentPullCursor(), 0);
   });
+
+  test(
+    'AdminReadOnly applies pulled stock without queueing technical ACK',
+    () async {
+      final fixture = await _Fixture.create(mode: 'AdminReadOnly');
+      addTearDown(fixture.dispose);
+
+      final change = fixture.change(cursor: 1);
+
+      await fixture.repository.applyPullBatch(fixture.batch(change));
+
+      expect(await fixture.count('inventory_lots'), 1);
+      expect(await fixture.count('inventory_movements'), 1);
+      expect(await fixture.countAck(), 0);
+      expect(await fixture.repository.currentPullCursor(), 1);
+    },
+  );
 }
 
 final class _Fixture {
@@ -93,7 +140,7 @@ final class _Fixture {
   final Database db;
   final SyncRepository repository;
 
-  static Future<_Fixture> create() async {
+  static Future<_Fixture> create({String mode = 'PointOfSale'}) async {
     final database = AppDatabase(
       factory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
@@ -117,7 +164,7 @@ final class _Fixture {
       'global_id': 'device-1',
       'branch_id': branchId,
       'name': 'POS',
-      'mode': 'PointOfSale',
+      'mode': mode,
       'created_at': now,
       'updated_at': now,
     });
@@ -195,6 +242,14 @@ final class _Fixture {
 
   Future<int> count(String table) async {
     final rows = await db.rawQuery('SELECT COUNT(*) count FROM $table');
+    return rows.single['count']! as int;
+  }
+
+  Future<int> countAck() async {
+    final rows = await db.rawQuery(
+      "SELECT COUNT(*) count FROM sync_queue "
+      "WHERE entity_type='CentralTransferApplied'",
+    );
     return rows.single['count']! as int;
   }
 

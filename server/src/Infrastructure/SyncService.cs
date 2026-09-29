@@ -242,6 +242,12 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             case ("InitialInventory", "Create"):
                 await ApplyInitialInventoryAsync(operation, tenant, cancellationToken);
                 break;
+            case ("CentralTransferApplied", "Create"):
+                await ApplyCentralTransferAppliedAsync(
+                    operation,
+                    tenant,
+                    cancellationToken);
+                break;
             case ("Expense", "Create"):
                 await ApplyExpenseAsync(operation, tenant, cancellationToken);
                 break;
@@ -834,6 +840,87 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         if (computedTotal != payload.TotalCents)
             throw new ArgumentException("Purchase total does not equal the sum of lines.");
         _db.Purchases.Add(purchase);
+    }
+
+    private async Task ApplyCentralTransferAppliedAsync(
+        SyncOperationDto operation,
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
+    {
+        var payload =
+            Deserialize<CentralTransferAppliedSyncPayload>(operation);
+
+        ValidateEnvelope(operation, payload.GlobalId);
+
+        if (payload.TransferGlobalId == Guid.Empty)
+            throw new ArgumentException(
+                "Central transfer identifier is required.");
+
+        if (payload.AppliedAt == default)
+            throw new ArgumentException(
+                "Central transfer applied timestamp is required.");
+
+        ValidateTransactionalContext(
+            payload.BusinessGlobalId,
+            payload.BranchGlobalId,
+            payload.DeviceGlobalId,
+            tenant);
+
+        var receiptExists =
+            await _db.CentralInventoryTransferReceipts
+                .AsNoTracking()
+                .AnyAsync(
+                    x =>
+                        x.BusinessId == tenant.BusinessId &&
+                        x.BranchId == tenant.BranchId &&
+                        x.TransferGlobalId ==
+                            payload.TransferGlobalId,
+                    cancellationToken);
+
+        if (!receiptExists)
+        {
+            throw new ArgumentException(
+                "Central transfer was not accepted for this branch.");
+        }
+
+        var existing =
+            await _db.CentralInventoryTransferApplications
+                .AsNoTracking()
+                .AnyAsync(
+                    x =>
+                        x.BusinessId == tenant.BusinessId &&
+                        x.TransferGlobalId ==
+                            payload.TransferGlobalId &&
+                        x.DeviceId == tenant.DeviceId,
+                    cancellationToken);
+
+        if (existing)
+            return;
+
+        var globalIdCollision =
+            await _db.CentralInventoryTransferApplications
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.GlobalId == payload.GlobalId,
+                    cancellationToken);
+
+        if (globalIdCollision)
+        {
+            throw new ArgumentException(
+                "Central transfer application identifier already exists.");
+        }
+
+        _db.CentralInventoryTransferApplications.Add(
+            new CentralInventoryTransferApplication
+            {
+                GlobalId = payload.GlobalId,
+                TransferGlobalId = payload.TransferGlobalId,
+                BusinessId = tenant.BusinessId,
+                BranchId = tenant.BranchId,
+                DeviceId = tenant.DeviceId,
+                AppliedAt = payload.AppliedAt,
+                AcknowledgedAt = DateTimeOffset.UtcNow
+            });
     }
 
     private async Task ApplyInitialInventoryAsync(SyncOperationDto operation, SyncTenantContext tenant, CancellationToken cancellationToken)
@@ -1545,13 +1632,15 @@ public sealed class SyncService(PosDbContext db) : ISyncService
                     "CashMovement" or
                     "Purchase" or
                     "InitialInventory" or
+                    "CentralTransferApplied" or
                     "Expense",
 
             "Seller" =>
                 (entityType == "Sale" &&
                     operation is "Create" or "Cancel") ||
                 entityType == "CashSession" ||
-                (entityType == "Purchase" && operation == "Create"),
+                (entityType == "Purchase" && operation == "Create") ||
+                entityType == "CentralTransferApplied",
 
             _ => false
         };
