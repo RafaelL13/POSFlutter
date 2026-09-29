@@ -1,35 +1,72 @@
 # Backup y restore de SQL Server productivo
 
-Estado FASE 19: `PENDING_EXTERNAL`. Este procedimiento requiere acceso administrativo al servidor y no fue ejecutado por el agente actual.
+## Estado de certificacion
 
-Intento 2026-09-08: desde `SISTEMAS`, `DESKTOP-L6KS3RK\SERVER` no estuvo accesible por red. La auditoría de recovery model, historial, Agent, espacio, backup y restore no pudo ejecutarse. Realice los pasos siguientes directamente en `DESKTOP-L6KS3RK`; no exponga 1433 para habilitar esta tarea.
+P009.3 fue ejecutado contra el entorno autorizado de SQL Server y quedo cerrado en PASS.
 
-## Política mínima
+Servidor: DESKTOP-L6KS3RK\SERVER
+Base productiva: POSFlutter
 
-- Backup full diario de `POSFlutter`; diferencial según volumen y objetivo RPO.
-- Backups de log frecuentes si se usa modelo `FULL`; verifique primero el recovery model.
-- Retención mínima acordada por negocio (recomendado: diarios 14 días, semanales 8 semanas y mensuales 12 meses).
-- Copia secundaria cifrada fuera del volumen/host de SQL Server, con acceso restringido.
-- Alertas por fallo, espacio insuficiente y antigüedad del último backup.
-- Prueba de restauración periódica en una base aislada, nunca sobre producción.
+La base productiva permanecio ONLINE. La restauracion de prueba se realizo exclusivamente sobre una base temporal aislada.
 
-## Ejecución controlada
+## Politica minima
 
-Use SQL Server Agent o la herramienta corporativa de backup con una identidad administrativa; `posflutter_api` no debe recibir permisos de backup/migración. El nombre y destino deben incluir fecha UTC y no contener credenciales.
+- Backup full diario de POSFlutter; diferencial segun volumen y objetivo RPO.
+- Backups de log cuando la estrategia adoptada y el recovery model lo requieran.
+- Retencion definida por negocio.
+- Copia secundaria protegida fuera del volumen o host principal de SQL Server.
+- Acceso restringido a los respaldos.
+- Alertas por fallo, espacio insuficiente y antiguedad del ultimo backup.
+- Prueba periodica de restauracion en una base aislada, nunca directamente sobre produccion.
 
-Antes de go-live registre: archivo full creado, `RESTORE VERIFYONLY` satisfactorio, checksum cuando la versión lo soporte, copia secundaria confirmada y responsable/retención. Después restaure en una base temporal aislada, ejecute `DBCC CHECKDB`, confirme tablas/migraciones y elimine la base temporal mediante el cambio operativo autorizado.
+## Procedimiento certificado P009.3
 
-## Evidencia requerida
+El backup de certificacion fue generado como FULL con COPY_ONLY y CHECKSUM.
 
-```text
+Posteriormente se ejecuto:
+
+1. RESTORE VERIFYONLY WITH CHECKSUM.
+2. Restore aislado a POSFlutter_DR_P009.
+3. Confirmacion de la base recuperada en estado ONLINE.
+4. DBCC CHECKDB.
+5. Comparacion de las 23 tablas de usuario.
+6. Comparacion exacta de conteos de filas en las 23 tablas.
+7. Eliminacion controlada de POSFlutter_DR_P009.
+8. Confirmacion de que POSFlutter productiva permanecio ONLINE.
+
+La cuenta de aplicacion posflutter_api no debe recibir permisos administrativos de backup, restore o migracion.
+
+## Evidencia P009.3
+
+Backup certificado:
+
+C:\Backups\POSFlutter\SQL\POSFlutter_P009_3C_20260925_001447.bak
+
+SHA-256:
+
+FB84B56F28360D9C5B500E7285E19051E868B1D20303D04B77D155BDF250BA4B
+
+Resultados:
+
 CENTRAL_DB_BACKUP=PASS
-BACKUP_UTC=
-BACKUP_LOCATION_PRIMARY=
-BACKUP_LOCATION_SECONDARY=
+BACKUP_TYPE=FULL_COPY_ONLY
+BACKUP_CHECKSUM=PASS
 RESTORE_VERIFYONLY=PASS
-RESTORE_TEST_DATABASE=PASS
+RESTORE_TEST_DATABASE=POSFlutter_DR_P009
+RESTORE_TEST_DATABASE_RESULT=PASS
+RECOVERY_DATABASE_ONLINE=PASS
 DBCC_CHECKDB=PASS
-EXECUTED_BY=
-```
+PRODUCTION_USER_TABLE_COUNT=23
+RECOVERY_USER_TABLE_COUNT=23
+TABLE_STRUCTURE_COMPARISON=PASS
+ROW_COUNT_COMPARISON_23_OF_23=PASS
+RECOVERY_DATABASE_CLEANUP=PASS
+PRODUCTION_DATABASE_ONLINE_AFTER_TEST=PASS
 
-No registre passwords, connection strings ni claves en esta evidencia.
+La ruta anterior es evidencia de la certificacion P009.3 y no constituye un contrato permanente de ubicacion o retencion.
+
+## Seguridad
+
+No registrar passwords, connection strings con secretos, JWT signing keys, tokens, claves privadas ni material de firma Android en esta evidencia.
+
+Una restauracion sobre produccion requiere autorizacion explicita y un procedimiento operativo de recuperacion separado.
