@@ -98,16 +98,6 @@ const appNavigationSections = <AppNavigationSection>[
     ],
   ),
   AppNavigationSection(
-    title: 'POSFLUTTER ADMIN',
-    items: [
-      AppNavigationItem(
-        label: 'Panel POS y reportes',
-        icon: Icons.monitor_heart_outlined,
-        route: '/cloud-admin',
-      ),
-    ],
-  ),
-  AppNavigationSection(
     title: 'ADMINISTRACIÓN',
     items: [
       AppNavigationItem(
@@ -119,6 +109,11 @@ const appNavigationSections = <AppNavigationSection>[
         label: 'Respaldos',
         icon: Icons.backup_outlined,
         route: '/backup',
+      ),
+      AppNavigationItem(
+        label: 'Administración nube',
+        icon: Icons.cloud_outlined,
+        route: '/cloud-admin',
       ),
       AppNavigationItem(
         label: 'Configuración',
