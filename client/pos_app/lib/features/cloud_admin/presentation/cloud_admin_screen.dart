@@ -34,7 +34,7 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
     EffectiveCapabilities effective,
   ) => Scaffold(
     appBar: AppBar(
-      title: const Text('Administración remota'),
+      title: const Text('POSFlutter Admin'),
       actions: [
         if (effective.can(Capability.enrollment))
           IconButton(
@@ -52,7 +52,7 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
           future: repo.dashboard(),
           builder: (context, snapshot) => Card(
             child: ListTile(
-              title: const Text('Dashboard cloud'),
+              title: const Text('Resumen operativo POS'),
               subtitle: Text(
                 snapshot.hasData
                     ? snapshot.data.toString()
@@ -69,7 +69,7 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
               leading: const Icon(Icons.analytics_outlined),
               title: const Text('Reportes remotos'),
               subtitle: const Text(
-                'Ventas, utilidad, inventario, compras, gastos, caja y tendencias',
+                'Ventas reales, utilidad FIFO, caja, pagos, cancelaciones y tendencias',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.go('/cloud-admin/reports'),
@@ -155,7 +155,7 @@ class _CloudAdminScreenState extends ConsumerState<CloudAdminScreen> {
 
 const _cloudReadEntries =
     <({String label, String path, Capability capability})>[
-      (label: 'Ventas', path: '/api/sales', capability: Capability.saleHistory),
+      (label: 'Ventas POS', path: '/api/sales', capability: Capability.saleHistory),
       (
         label: 'Productos',
         path: '/api/products',
@@ -172,7 +172,7 @@ const _cloudReadEntries =
         capability: Capability.supplierRead,
       ),
       (
-        label: 'Inventario',
+        label: 'Existencias sincronizadas',
         path: '/api/inventory',
         capability: Capability.inventoryAvailabilityRead,
       ),
@@ -194,7 +194,7 @@ const _cloudReadEntries =
       (label: 'Caja', path: '/api/cash', capability: Capability.cashRead),
       (label: 'Usuarios', path: '/api/users', capability: Capability.usersRead),
       (
-        label: 'Dispositivos',
+        label: 'Tablets / dispositivos',
         path: '/api/devices',
         capability: Capability.devicesRead,
       ),
