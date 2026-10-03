@@ -7,6 +7,7 @@ import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_csv_service.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_models.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_repository.dart';
+import 'package:pos_app/features/cloud_admin/reports/data/remote_report_xlsx_service.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class RemoteReportDetailScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
   );
   late final Future<RemoteReportCatalogs> _catalogs = _repository.catalogs();
   final RemoteReportCsvService _csv = RemoteReportCsvService();
+  final RemoteReportXlsxService _xlsx = RemoteReportXlsxService();
   RemoteReportFilter _filter = RemoteReportFilter.forPreset(
     ReportPreset.thisMonth,
   );
@@ -43,9 +45,14 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
       title: Text(widget.kind.title),
       actions: [
         IconButton(
+          tooltip: 'Exportar Excel',
+          onPressed: _exportXlsx,
+          icon: const Icon(Icons.table_view_outlined),
+        ),
+        IconButton(
           tooltip: 'Exportar CSV',
-          onPressed: _export,
-          icon: const Icon(Icons.download),
+          onPressed: _exportCsv,
+          icon: const Icon(Icons.download_outlined),
         ),
       ],
     ),
@@ -202,7 +209,7 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
     }
   }
 
-  Future<void> _export() async {
+  Future<void> _exportCsv() async {
     final table = _lastTable;
     if (table == null) {
       if (mounted) {
@@ -216,6 +223,23 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('CSV: ${file.path}')));
+    }
+  }
+
+  Future<void> _exportXlsx() async {
+    final table = _lastTable;
+    if (table == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Carga el reporte antes de exportar.')),
+        );
+      }
+      return;
+    }
+    final file = await _xlsx.export(table);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Excel: ${file.path}')));
     }
   }
 }
