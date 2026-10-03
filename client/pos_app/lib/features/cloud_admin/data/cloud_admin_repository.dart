@@ -7,9 +7,6 @@ final class CloudAdminRepository {
   Future<Map<String, Object?>> dashboard() =>
       _api.get('/api/admin/reports/summary');
 
-  Future<Map<String, Object?>> posStatus() =>
-      _api.get('/api/admin/pos/status');
-
   Future<List<Object?>> list(String path) async {
     final json = await _api.get(path);
     return List<Object?>.from(json['items'] as List? ?? const []);
