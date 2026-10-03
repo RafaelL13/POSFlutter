@@ -238,7 +238,7 @@ class _PosSummaryCard extends StatelessWidget {
     final cents = value is num ? value.toInt() : 0;
     final sign = cents < 0 ? '-' : '';
     final absolute = cents.abs();
-    return '$sign\${absolute ~/ 100}.${(absolute % 100).toString().padLeft(2, '0')}';
+    return '$sign\$${absolute ~/ 100}.${(absolute % 100).toString().padLeft(2, '0')}';
   }
 }
 
