@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>(); builder.Services.AddScoped<PosAdminInsightsService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>(); builder.Services.AddScoped<PosAdminInsightsService>(); builder.Services.AddScoped<InternalPosAdminTenantResolver>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
@@ -210,6 +210,297 @@ reportApi.MapGet("/trends/products",async(DateTimeOffset? from,DateTimeOffset? t
  if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
  return Results.Ok(new{stableThresholdPercent=5.0,comparison="current period versus immediately preceding equal-length period",items=await r.ProductTrendsAsync(T(h),period,top??50,ct,productGlobalId,categoryGlobalId)});
 });
+
+
+var internalPosAdmin = app.MapGroup(
+    "/api/internal/inventory-central/pos-admin");
+
+internalPosAdmin.MapGet(
+    "/summary",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(
+                request,
+                configuration))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!TryReportPeriod(from, to, out var period))
+        {
+            return Results.BadRequest(new { error = "Invalid report period." });
+        }
+
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await reports.SummaryAsync(tenant, period, ct));
+    });
+
+internalPosAdmin.MapGet(
+    "/sales",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int? page,
+        int? pageSize,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await reports.SaleDetailsAsync(
+                tenant,
+                period,
+                page ?? 1,
+                pageSize ?? 100,
+                ct));
+    });
+
+internalPosAdmin.MapGet(
+    "/products",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        int? top,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(new
+            {
+                items = await reports.ProductsAsync(
+                    tenant,
+                    period,
+                    "revenue",
+                    true,
+                    Math.Clamp(top ?? 100, 1, 200),
+                    ct)
+            });
+    });
+
+internalPosAdmin.MapGet(
+    "/users",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(new { items = await reports.UsersAsync(tenant, period, ct) });
+    });
+
+internalPosAdmin.MapGet(
+    "/expenses",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await reports.ExpensesAsync(
+                tenant,
+                period,
+                "category",
+                1,
+                200,
+                ct));
+    });
+
+internalPosAdmin.MapGet(
+    "/cash",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await reports.CashAsync(tenant, period, 1, 200, ct));
+    });
+
+internalPosAdmin.MapGet(
+    "/payment-methods",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(new
+            {
+                items = await reports.PaymentMethodsAsync(tenant, period, ct)
+            });
+    });
+
+internalPosAdmin.MapGet(
+    "/cancellations",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await reports.CancellationsAsync(
+                tenant,
+                period,
+                1,
+                200,
+                ct));
+    });
+
+internalPosAdmin.MapGet(
+    "/trends",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        RemoteReportService reports,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(new
+            {
+                items = await reports.ProductTrendsAsync(
+                    tenant,
+                    period,
+                    100,
+                    ct)
+            });
+    });
+
+internalPosAdmin.MapGet(
+    "/branches",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        PosAdminInsightsService insights,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        if (!TryReportPeriod(from, to, out var period))
+            return Results.BadRequest(new { error = "Invalid report period." });
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(new
+            {
+                items = await insights.BranchesAsync(tenant, period, ct)
+            });
+    });
+
+internalPosAdmin.MapGet(
+    "/sync-status",
+    async (
+        HttpRequest request,
+        Guid businessGlobalId,
+        IConfiguration configuration,
+        InternalPosAdminTenantResolver resolver,
+        PosAdminInsightsService insights,
+        CancellationToken ct) =>
+    {
+        if (!Pos.Api.CentralInventoryAuthentication.IsAuthorized(request, configuration))
+            return Results.Unauthorized();
+        var tenant = await resolver.ResolveAsync(businessGlobalId, ct);
+        return tenant is null
+            ? Results.NotFound(new { error = "POS business context was not found." })
+            : Results.Ok(await insights.SyncStatusAsync(tenant, ct));
+    });
 
 app.MapGet(
     "/api/internal/inventory-central/stock",
