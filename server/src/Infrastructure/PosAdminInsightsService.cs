@@ -14,6 +14,42 @@ public sealed class PosAdminInsightsService(PosDbContext db)
             ? 0
             : Math.Round((double)numerator * 100d / denominator, 2);
 
+    private async Task EnsureActiveTenantAsync(
+        SyncTenantContext tenant,
+        CancellationToken cancellationToken)
+    {
+        var valid = await (
+            from business in _db.Businesses.AsNoTracking()
+            join branch in _db.Branches.AsNoTracking()
+                on business.Id equals branch.BusinessId
+            join device in _db.Devices.AsNoTracking()
+                on branch.Id equals device.BranchId
+            join user in _db.Users.AsNoTracking()
+                on business.Id equals user.BusinessId
+            where business.Id == tenant.BusinessId
+                && business.GlobalId == tenant.BusinessGlobalId
+                && business.Active
+                && branch.Id == tenant.BranchId
+                && branch.GlobalId == tenant.BranchGlobalId
+                && branch.Active
+                && device.Id == tenant.DeviceId
+                && device.GlobalId == tenant.DeviceGlobalId
+                && device.Active
+                && device.Mode == tenant.DeviceMode
+                && user.Id == tenant.UserId
+                && user.GlobalId == tenant.UserGlobalId
+                && user.Active
+                && user.Role == tenant.Role
+            select business.Id)
+            .AnyAsync(cancellationToken);
+
+        if (!valid)
+        {
+            throw new UnauthorizedAccessException(
+                "Tenant context is not active.");
+        }
+    }
+
     public async Task<PosAdminSyncOverview> SyncStatusAsync(
         SyncTenantContext tenant,
         CancellationToken cancellationToken)
@@ -21,6 +57,7 @@ public sealed class PosAdminInsightsService(PosDbContext db)
         BackendReadAuthorization.Require(
             tenant,
             BackendReadCapability.DevicesRead);
+        await EnsureActiveTenantAsync(tenant, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         var rows = await (
@@ -89,6 +126,7 @@ public sealed class PosAdminInsightsService(PosDbContext db)
         BackendReadAuthorization.Require(
             tenant,
             BackendReadCapability.FinancialReportsRead);
+        await EnsureActiveTenantAsync(tenant, cancellationToken);
 
         var sales = _db.Sales.AsNoTracking().Where(
             sale =>
@@ -105,9 +143,6 @@ public sealed class PosAdminInsightsService(PosDbContext db)
                 NetSalesCents = group
                     .Where(x => x.Status == Confirmed)
                     .Sum(x => (long?)x.TotalCents) ?? 0,
-                FifoCostCents = group
-                    .Where(x => x.Status == Confirmed)
-                    .Sum(x => (long?)x.FifoCostCents) ?? 0,
                 CancelledSalesCount = group.Count(x => x.Status == Cancelled),
                 CancelledSalesCents = group
                     .Where(x => x.Status == Cancelled)
@@ -115,9 +150,11 @@ public sealed class PosAdminInsightsService(PosDbContext db)
             })
             .ToListAsync(cancellationToken);
 
+        var confirmedSales = sales.Where(x => x.Status == Confirmed);
+
         var units = await (
             from line in _db.SaleLines.AsNoTracking()
-            join sale in sales.Where(x => x.Status == Confirmed)
+            join sale in confirmedSales
                 on line.SaleId equals sale.Id
             group line by sale.BranchId
             into group
@@ -127,6 +164,20 @@ public sealed class PosAdminInsightsService(PosDbContext db)
                 Units = group.Sum(x => x.Quantity)
             }).ToListAsync(cancellationToken);
 
+        var costs = await (
+            from allocation in _db.SaleLotAllocations.AsNoTracking()
+            join line in _db.SaleLines.AsNoTracking()
+                on allocation.SaleLineId equals line.Id
+            join sale in confirmedSales
+                on line.SaleId equals sale.Id
+            group allocation by sale.BranchId
+            into group
+            select new
+            {
+                BranchId = group.Key,
+                CostCents = group.Sum(x => x.TotalCostCents)
+            }).ToListAsync(cancellationToken);
+
         var branches = await _db.Branches.AsNoTracking()
             .Where(x => x.BusinessId == tenant.BusinessId && x.Active)
             .Select(x => new { x.Id, x.GlobalId, x.Name })
@@ -134,13 +185,14 @@ public sealed class PosAdminInsightsService(PosDbContext db)
 
         var aggregateMap = aggregates.ToDictionary(x => x.BranchId);
         var unitMap = units.ToDictionary(x => x.BranchId, x => x.Units);
+        var costMap = costs.ToDictionary(x => x.BranchId, x => x.CostCents);
 
         return branches
             .Select(branch =>
             {
                 aggregateMap.TryGetValue(branch.Id, out var aggregate);
                 var revenue = aggregate?.NetSalesCents ?? 0;
-                var cost = aggregate?.FifoCostCents ?? 0;
+                var cost = costMap.GetValueOrDefault(branch.Id);
                 var profit = revenue - cost;
                 return new BranchPerformanceRow(
                     branch.GlobalId,
