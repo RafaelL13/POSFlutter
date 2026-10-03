@@ -101,6 +101,7 @@ app.MapPost("/api/bootstrap",async(BootstrapRequest r,PosDbContext db,TokenServi
 });
 
 app.MapPost("/api/device-enrollment/invitations",async(CreateDeviceEnrollmentRequest r,HttpContext http,DeviceEnrollmentService s,CancellationToken ct)=>Results.Ok(await s.CreateInvitationAsync(TenantClaims.Require(http.User),r,ct))).RequireAuthorization("Administrator");
+app.MapPost("/api/device-enrollment/recovery-invitations",async(CreateDeviceRecoveryInvitationRequest r,HttpContext http,DeviceEnrollmentService s,CancellationToken ct)=>Results.Ok(await s.CreateRecoveryInvitationAsync(TenantClaims.Require(http.User),r,ct))).RequireAuthorization("Administrator");
 app.MapPost("/api/device-enrollment/redeem",async(RedeemDeviceEnrollmentRequest r,DeviceEnrollmentService s,CancellationToken ct)=>(await s.RedeemAsync(r,ct)) is { } x?Results.Ok(x):Results.BadRequest(new{message="Unable to enroll device."})).RequireRateLimiting("enrollment");
 app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PushAsync(r,TenantClaims.Require(h.User),ct))).RequireAuthorization();
 app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/device_mode.dart';
+import 'package:pos_app/core/network/cloud_api_client.dart';
 import 'package:pos_app/core/design/app_breakpoints.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
@@ -107,22 +109,57 @@ class _FirstRunScreenState extends ConsumerState<FirstRunScreen> {
     if (values == null) return;
     setState(() => _busy = true);
     try {
-      await EnrollmentRepository(appDatabase, cloudApiClient).redeem(
-        code: values[0],
-        username: values[1],
-        password: values[2],
-        deviceName: values[3],
-      );
+      final enrollment = await EnrollmentRepository(appDatabase, cloudApiClient)
+          .redeem(
+            code: values[0],
+            username: values[1],
+            password: values[2],
+            deviceName: values[3],
+          );
       ref.invalidate(businessBrandingProvider);
       if (mounted) {
-        context.go('/cloud-admin');
+        context.go(
+          enrollment.mode == DeviceMode.adminReadOnly
+              ? '/cloud-admin'
+              : '/dashboard',
+        );
+      }
+      if (!enrollment.cloudCredentialsPersisted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'El dispositivo quedó listo para operar sin conexión. La sincronización se reintentará cuando la nube esté disponible.',
+            ),
+          ),
+        );
+      }
+    } on EnrollmentPostRedeemException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'El dispositivo fue reconocido, pero no fue posible completar la configuración local. Intenta nuevamente.',
+            ),
+          ),
+        );
+      }
+    } on CloudApiException catch (e) {
+      if (mounted) {
+        final message = switch (e.statusCode) {
+          400 => 'No fue posible conectar el dispositivo. Verifica el código de invitación y los datos proporcionados.',
+          401 || 403 => 'Las credenciales no fueron aceptadas o no tienen permiso para conectar este dispositivo.',
+          _ => 'No fue posible conectar con el servicio. Verifica la conexión a Internet e intenta nuevamente.',
+        };
+
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'No fue posible conectar el dispositivo. Verifica invitación y credenciales.',
+              'No fue posible conectar el dispositivo. Verifica la red y los datos proporcionados.',
             ),
           ),
         );

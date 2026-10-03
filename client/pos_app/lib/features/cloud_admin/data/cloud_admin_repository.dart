@@ -1,3 +1,4 @@
+import 'package:pos_app/core/authorization/device_mode.dart';
 import 'package:pos_app/core/network/cloud_api_client.dart';
 
 final class CloudAdminRepository {
@@ -12,8 +13,11 @@ final class CloudAdminRepository {
     return List<Object?>.from(json['items'] as List? ?? const []);
   }
 
-  Future<Map<String, Object?>> createInvitation({int minutes = 15}) =>
-      _api.post('/api/device-enrollment/invitations', {
-        'expiresInMinutes': minutes,
-      });
+  Future<Map<String, Object?>> createInvitation({
+    int minutes = 15,
+    required DeviceMode mode,
+  }) => _api.post('/api/device-enrollment/invitations', {
+    'expiresInMinutes': minutes,
+    'mode': mode.wireValue,
+  });
 }

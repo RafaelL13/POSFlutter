@@ -12,6 +12,7 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
 {
     private const string AdministratorRole = "Administrator";
     private const string AdminReadOnlyMode = "AdminReadOnly";
+    private const string PointOfSaleMode = "PointOfSale";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly PosDbContext _db = db;
     private readonly ITokenService _tokens = tokens;
@@ -31,14 +32,16 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
             ?? throw new UnauthorizedAccessException("The authenticated branch is not active.");
 
         var minutes = Math.Clamp(request.ExpiresInMinutes ?? 15, 5, 30);
+        var requestedMode = NormalizeMode(request.Mode);
         var now = DateTimeOffset.UtcNow;
-        var rawToken = Base64Url(RandomNumberGenerator.GetBytes(32));
+        var rawToken = GenerateEnrollmentCode();
         _db.DeviceEnrollmentTokens.Add(new DeviceEnrollmentToken
         {
             TokenHash = HashToken(rawToken),
             BusinessId = tenant.BusinessId,
             BranchId = branch.Id,
             CreatedByUserId = tenant.UserId,
+            RequestedMode = requestedMode,
             CreatedAt = now,
             ExpiresAt = now.AddMinutes(minutes)
         });
@@ -48,17 +51,80 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
             rawToken,
             tenant.BusinessGlobalId,
             branch.GlobalId,
-            now.AddMinutes(minutes));
+            now.AddMinutes(minutes),
+            requestedMode);
     }
 
+    public async Task<DeviceEnrollmentInvitation> CreateRecoveryInvitationAsync(
+        SyncTenantContext tenant,
+        CreateDeviceRecoveryInvitationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (tenant.Role != AdministratorRole)
+            throw new UnauthorizedAccessException("Only administrators can recover devices.");
+
+        if (request.DeviceGlobalId == Guid.Empty)
+            throw new ArgumentException("DeviceGlobalId is required.", nameof(request));
+
+        var branch = await _db.Branches.AsNoTracking().SingleOrDefaultAsync(
+            x => x.Id == tenant.BranchId &&
+                 x.GlobalId == tenant.BranchGlobalId &&
+                 x.BusinessId == tenant.BusinessId &&
+                 x.Active,
+            cancellationToken)
+            ?? throw new UnauthorizedAccessException(
+                "The authenticated branch is not active.");
+
+        var device = await _db.Devices.AsNoTracking().SingleOrDefaultAsync(
+            x => x.GlobalId == request.DeviceGlobalId &&
+                 x.BranchId == branch.Id &&
+                 x.Active,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "The device is not active in the authenticated branch.");
+
+        var minutes = Math.Clamp(
+            request.ExpiresInMinutes ?? 15,
+            5,
+            30);
+
+        var now = DateTimeOffset.UtcNow;
+        var rawToken = GenerateEnrollmentCode();
+
+        _db.DeviceEnrollmentTokens.Add(
+            new DeviceEnrollmentToken
+            {
+                TokenHash = HashToken(rawToken),
+                BusinessId = tenant.BusinessId,
+                BranchId = branch.Id,
+                CreatedByUserId = tenant.UserId,
+                RequestedMode = device.Mode,
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(minutes),
+
+                // A recovery invitation represents an enrollment
+                // that already completed on the server.
+                UsedAt = now,
+                DeviceId = device.Id
+            });
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new DeviceEnrollmentInvitation(
+            rawToken,
+            tenant.BusinessGlobalId,
+            branch.GlobalId,
+            now.AddMinutes(minutes),
+            device.Mode);
+    }
     public async Task<EnrolledAdministrativeDevice?> RedeemAsync(
         RedeemDeviceEnrollmentRequest request,
         CancellationToken cancellationToken)
     {
-        var token = request.Token.Trim();
+        var token = NormalizeEnrollmentToken(request.Token);
         var username = request.Username.Trim();
         var deviceName = request.DeviceName.Trim();
-        if (token.Length < 20 || request.DeviceGlobalId == Guid.Empty || deviceName.Length is < 2 or > 120 ||
+        if (!IsValidEnrollmentToken(token) || request.DeviceGlobalId == Guid.Empty || deviceName.Length is < 2 or > 120 ||
             username.Length < 3 || request.Password.Length < 8)
             return null;
 
@@ -123,7 +189,7 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
                 GlobalId = request.DeviceGlobalId,
                 BranchId = branch.Id,
                 Name = deviceName,
-                Mode = AdminReadOnlyMode,
+                Mode = invitation.RequestedMode,
                 Active = true,
                 CreatedAt = now,
                 LastSyncAt = now,
@@ -208,7 +274,7 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
                  x.GlobalId == request.DeviceGlobalId &&
                  x.BranchId == branch.Id &&
                  x.Active &&
-                 x.Mode == AdminReadOnlyMode,
+                 x.Mode == invitation.RequestedMode,
             cancellationToken);
         if (device is null) return null;
 
@@ -236,8 +302,58 @@ public sealed class DeviceEnrollmentService(PosDbContext db, ITokenService token
             auth);
     }
 
+    private static string NormalizeMode(string? mode)
+    {
+        var normalized = mode?.Trim();
+
+        return normalized switch
+        {
+            PointOfSaleMode => PointOfSaleMode,
+            AdminReadOnlyMode => AdminReadOnlyMode,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                "Device mode must be PointOfSale or AdminReadOnly.")
+        };
+    }
     private static string HashToken(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+    private const string EnrollmentCodeAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    private const int EnrollmentCodeLength = 8;
+
+    private static string GenerateEnrollmentCode()
+    {
+        Span<char> chars = stackalloc char[EnrollmentCodeLength];
+
+        for (var i = 0; i < chars.Length; i++)
+        {
+            chars[i] = EnrollmentCodeAlphabet[
+                RandomNumberGenerator.GetInt32(EnrollmentCodeAlphabet.Length)];
+        }
+
+        return new string(chars);
+    }
+
+    private static string NormalizeEnrollmentToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return string.Empty;
+
+        return token
+            .Trim()
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .ToUpperInvariant();
+    }
+
+    private static bool IsValidEnrollmentToken(string token)
+    {
+        if (token.Length == EnrollmentCodeLength)
+            return token.All(EnrollmentCodeAlphabet.Contains);
+
+        // Backward compatibility for invitations generated before
+        // the short-code enrollment contract.
+        return token.Length >= 20;
+    }
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
