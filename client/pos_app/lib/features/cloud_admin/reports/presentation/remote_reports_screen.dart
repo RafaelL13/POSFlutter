@@ -24,7 +24,7 @@ class _RemoteReportsScreenState extends State<RemoteReportsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Reportes remotos')),
+    appBar: AppBar(title: const Text('Reportes POS · datos centralizados')),
     drawer: const AppNavigationDrawer(),
     body: RefreshIndicator(
       onRefresh: () async => setState(() {}),
@@ -175,7 +175,7 @@ class _RemoteError extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = error is CloudApiException
         ? (error as CloudApiException).message
-        : 'No fue posible consultar los reportes remotos.';
+        : 'No fue posible consultar los reportes POS.';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
