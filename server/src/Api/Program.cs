@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>(); builder.Services.AddScoped<PosAdminInsightsService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
@@ -124,7 +124,21 @@ app.MapGet("/api/devices",async(HttpContext h,TenantReadService r,CancellationTo
 app.MapGet("/api/business",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.BusinessAsync(T(h),ct))).RequireAuthorization(R(BackendReadCapability.BusinessRead));
 app.MapGet("/api/branches",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.BranchesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.BranchesRead));
 
+app.MapGet(
+    "/api/admin/pos/status",
+    async (
+        HttpContext h,
+        PosAdminInsightsService service,
+        CancellationToken ct) =>
+        Results.Ok(await service.SyncStatusAsync(T(h), ct)))
+    .RequireAuthorization(R(BackendReadCapability.DevicesRead));
+
 var reportApi=app.MapGroup("/api/admin/reports").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead));
+reportApi.MapGet("/branches",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,PosAdminInsightsService service,CancellationToken ct)=>
+{
+ if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period."});
+ return Results.Ok(new{items=await service.BranchesAsync(T(h),period,ct)});
+});
 reportApi.MapGet("/summary",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,RemoteReportService r,CancellationToken ct)=>
 {
  if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period. Use from inclusive and to exclusive, maximum 366 days."});
