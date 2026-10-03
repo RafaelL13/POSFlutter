@@ -8,6 +8,7 @@ import 'package:pos_app/features/cloud_admin/reports/data/remote_report_csv_serv
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_models.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_repository.dart';
 import 'package:pos_app/features/cloud_admin/reports/data/remote_report_xlsx_service.dart';
+import 'package:pos_app/features/cloud_admin/reports/data/remote_report_pdf_service.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 
 class RemoteReportDetailScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
   late final Future<RemoteReportCatalogs> _catalogs = _repository.catalogs();
   final RemoteReportCsvService _csv = RemoteReportCsvService();
   final RemoteReportXlsxService _xlsx = RemoteReportXlsxService();
+  final RemoteReportPdfService _pdf = RemoteReportPdfService();
   RemoteReportFilter _filter = RemoteReportFilter.forPreset(
     ReportPreset.thisMonth,
   );
@@ -44,6 +46,11 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
     appBar: AppBar(
       title: Text(widget.kind.title),
       actions: [
+        IconButton(
+          tooltip: 'Exportar PDF',
+          onPressed: _exportPdf,
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+        ),
         IconButton(
           tooltip: 'Exportar Excel',
           onPressed: _exportXlsx,
@@ -223,6 +230,23 @@ class _RemoteReportDetailScreenState extends State<RemoteReportDetailScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('CSV: ${file.path}')));
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    final table = _lastTable;
+    if (table == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Carga el reporte antes de exportar.')),
+        );
+      }
+      return;
+    }
+    final file = await _pdf.export(table);
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('PDF: ${file.path}')));
     }
   }
 
