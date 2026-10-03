@@ -82,7 +82,7 @@ final class RemoteReportPdfService {
       final absolute = cents.abs();
       final pesos = absolute ~/ 100;
       final decimals = (absolute % 100).toString().padLeft(2, '0');
-      return '$sign$$pesos.$decimals';
+      return '$sign\$pesos.$decimals';
     }
     if (column.toLowerCase().contains('percent') && value is num) {
       return '${value.toStringAsFixed(2)}%';
