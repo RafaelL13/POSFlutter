@@ -14,7 +14,6 @@ enum RemoteReportKind {
   cash,
   paymentMethods,
   cancellations,
-  branches,
   trends,
 }
 
@@ -32,7 +31,6 @@ extension RemoteReportKindInfo on RemoteReportKind {
     RemoteReportKind.cash => 'Caja',
     RemoteReportKind.paymentMethods => 'Formas de pago',
     RemoteReportKind.cancellations => 'Cancelaciones',
-    RemoteReportKind.branches => 'Sucursales',
     RemoteReportKind.trends => 'Tendencias',
   };
 
@@ -50,7 +48,6 @@ extension RemoteReportKindInfo on RemoteReportKind {
     RemoteReportKind.cash => '/api/admin/reports/cash',
     RemoteReportKind.paymentMethods => '/api/admin/reports/payment-methods',
     RemoteReportKind.cancellations => '/api/admin/reports/cancellations',
-    RemoteReportKind.branches => '/api/admin/reports/branches',
     RemoteReportKind.trends => '/api/admin/reports/trends/products',
   };
 }
@@ -145,7 +142,6 @@ final class RemoteReportRepository {
         query['top'] = '$top';
         break;
       case RemoteReportKind.inventory ||
-          RemoteReportKind.branches ||
           RemoteReportKind.categories ||
           RemoteReportKind.users ||
           RemoteReportKind.suppliers ||
@@ -351,22 +347,6 @@ final class RemoteReportRepository {
           rows: rowsFrom(details['items']),
           note:
               'Tasa: ${json['cancellationRatePercent'] ?? 0}% · ${json['cancelledSalesCount'] ?? 0} cancelaciones · ${json['cancelledUnits'] ?? 0} unidades',
-        );
-      case RemoteReportKind.branches:
-        return RemoteReportTable(
-          title: kind.title,
-          columns: const [
-            'branchName',
-            'salesCount',
-            'units',
-            'netSalesCents',
-            'fifoCostCents',
-            'grossProfitCents',
-            'grossMarginPercent',
-            'cancelledSalesCount',
-            'cancelledSalesCents',
-          ],
-          rows: rowsFrom(json['items']),
         );
       case RemoteReportKind.trends:
         final rows = rowsFrom(json['items']);
