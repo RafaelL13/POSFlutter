@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pos_app/core/app_services.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/authorization_service.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
 import 'package:pos_app/core/utils/money.dart';
@@ -176,21 +178,29 @@ class _ProductsScreenState extends State<ProductsScreen> {
       builder: (_) => _ProductFormDialog(initialCategories: categories),
     );
 
-    if (draft == null) return;
+    if (!mounted || draft == null) return;
 
     setState(() => _saving = true);
 
     try {
-      await CatalogRepository(appDatabase).addProduct(
-        code: draft.code,
-        name: draft.name,
-        categoryId: draft.category.id,
-        salePriceCents: draft.salePriceCents,
-        minimumStock: draft.minimumStock,
-        barcode: draft.barcode,
+      final completed = await runWithSpecialAuthorization(
+        context: context,
+        capability: Capability.productWrite,
+        operationLabel: 'Crear producto',
+        reason: 'Alta de producto ${draft.name}',
+        operation: (grant) async {
+          await CatalogRepository(appDatabase).addProduct(
+            code: draft.code,
+            name: draft.name,
+            categoryId: draft.category.id,
+            salePriceCents: draft.salePriceCents,
+            minimumStock: draft.minimumStock,
+            barcode: draft.barcode,
+            authorizationGrant: grant,
+          );
+        },
       );
-
-      if (!mounted) return;
+      if (!completed || !mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -248,24 +258,59 @@ class _ProductsScreenState extends State<ProductsScreen> {
     setState(() => _saving = true);
 
     try {
-      final completed = await runWithSpecialAuthorization(
-        context: context,
-        capability: Capability.productPriceChange,
-        operationLabel: 'Modificar precio de producto',
-        reason: 'Edición de producto ${product.name}',
-        operation: (grant) => CatalogRepository(appDatabase).updateProduct(
-          productId: product.id,
-          code: draft.code,
-          name: draft.name,
-          barcode: draft.barcode,
-          categoryId: draft.category.id,
-          salePriceCents: draft.salePriceCents,
-          minimumStock: draft.minimumStock,
-          active: draft.active,
-          priceAuthorizationGrant: grant,
-        ),
+      // Two independent grants are required if both product data and price change.
+      // The first operation attempts without grants to preserve direct Manager access.
+      final catalog = CatalogRepository(appDatabase);
+      SpecialAuthorizationGrant? writeGrant;
+      SpecialAuthorizationGrant? priceGrant;
+      Future<void> save() => catalog.updateProduct(
+        productId: product.id,
+        code: draft.code,
+        name: draft.name,
+        barcode: draft.barcode,
+        categoryId: draft.category.id,
+        salePriceCents: draft.salePriceCents,
+        minimumStock: draft.minimumStock,
+        active: draft.active,
+        authorizationGrant: writeGrant,
+        priceAuthorizationGrant: priceGrant,
       );
-
+      bool completed = false;
+      try {
+        await save();
+        completed = true;
+      } on AdditionalAuthorizationRequiredException catch (error) {
+        if (!mounted) return;
+        if (error.capability == Capability.productWrite) {
+          writeGrant = await showSpecialAuthorizationDialog(
+            context: context,
+            capability: Capability.productWrite,
+            operationLabel: 'Editar producto',
+            initialReason: 'Edición de producto ${product.name}',
+          );
+          if (writeGrant == null || !mounted) return;
+        } else if (error.capability != Capability.productPriceChange) {
+          rethrow;
+        }
+        try {
+          await save();
+          completed = true;
+        } on AdditionalAuthorizationRequiredException catch (priceError) {
+          if (priceError.capability != Capability.productPriceChange ||
+              !mounted) {
+            rethrow;
+          }
+          priceGrant = await showSpecialAuthorizationDialog(
+            context: context,
+            capability: Capability.productPriceChange,
+            operationLabel: 'Modificar precio de producto',
+            initialReason: 'Cambio de precio ${product.name}',
+          );
+          if (priceGrant == null || !mounted) return;
+          await save();
+          completed = true;
+        }
+      }
       if (!completed || !mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -604,13 +649,23 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       TextFormFieldSpec('Nombre'),
     ]);
 
-    if (values == null || values.first.trim().isEmpty) return;
+    if (!mounted || values == null || values.first.trim().isEmpty) return;
 
     setState(() => _creatingCategory = true);
 
     try {
-      final globalId = await CatalogRepository(appDatabase)
-          .addCategory(values.first.trim());
+      String? globalId;
+      final completed = await runWithSpecialAuthorization(
+        context: context,
+        capability: Capability.categoryWrite,
+        operationLabel: 'Crear categoría',
+        reason: 'Alta de categoría ${values.first.trim()}',
+        operation: (grant) async {
+          globalId = await CatalogRepository(appDatabase)
+              .addCategory(values.first.trim(), authorizationGrant: grant);
+        },
+      );
+      if (!completed || !mounted) return;
 
       final refreshed = await OperationalCatalogRepository(appDatabase)
           .categories();

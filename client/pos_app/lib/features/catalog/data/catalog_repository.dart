@@ -11,18 +11,21 @@ final class CatalogRepository {
     : _ids = ids ?? const UuidV7Generator();
   final AppDatabase _db;
   final IdGenerator _ids;
-  Future<String> addCategory(String name) async => _create(
-    Capability.categoryWrite,
-    'Category',
-    'categories',
-    {'name': name.trim(), 'description': null, 'active': 1},
-  );
-  Future<String> addSupplier(String name) async => _create(
-    Capability.supplierWrite,
-    'Supplier',
-    'suppliers',
-    {'name': name.trim(), 'active': 1},
-  );
+  Future<String> addCategory(
+    String name, {
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async => _create(Capability.categoryWrite, 'Category', 'categories', {
+    'name': name.trim(),
+    'description': null,
+    'active': 1,
+  }, authorizationGrant: authorizationGrant);
+  Future<String> addSupplier(
+    String name, {
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async => _create(Capability.supplierWrite, 'Supplier', 'suppliers', {
+    'name': name.trim(),
+    'active': 1,
+  }, authorizationGrant: authorizationGrant);
   Future<String> addProduct({
     required String code,
     required String name,
@@ -30,6 +33,7 @@ final class CatalogRepository {
     required int salePriceCents,
     int minimumStock = 0,
     String? barcode,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     if (code.trim().isEmpty) {
       throw ArgumentError('El código es obligatorio.');
@@ -47,8 +51,13 @@ final class CatalogRepository {
       throw ArgumentError('Stock mínimo inválido.');
     }
 
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.productWrite);
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.productWrite,
+      grant: authorizationGrant,
+    );
 
     final ctx = authorization.context!;
     final db = await _db.open();
@@ -70,6 +79,16 @@ final class CatalogRepository {
     final productGlobalId = _ids.newId();
 
     await _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.productWrite,
+            operation: 'CreateProduct',
+            entityType: 'Product',
+            entityGlobalId: productGlobalId,
+          );
       await tx.insert('products', {
         'global_id': productGlobalId,
         'business_id': ctx.businessId,
@@ -103,6 +122,7 @@ final class CatalogRepository {
           'minimumStock': minimumStock,
           'active': true,
           'serverVersion': 0,
+          'authorization': ?authorizationMetadata,
           'updatedAt': now,
         }),
         'created_at': now,
@@ -122,6 +142,7 @@ final class CatalogRepository {
     required bool active,
     String? barcode,
     SpecialAuthorizationGrant? priceAuthorizationGrant,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     final normalizedCode = code.trim();
     final normalizedName = name.trim();
@@ -143,8 +164,13 @@ final class CatalogRepository {
       throw ArgumentError('Stock mínimo inválido.');
     }
 
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.productWrite);
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final preparedWriteAuthorization = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.productWrite,
+      grant: authorizationGrant,
+    );
 
     final ctx = authorization.context!;
     final db = await _db.open();
@@ -181,8 +207,6 @@ final class CatalogRepository {
     final oldPrice = product['sale_price_cents']! as int;
     final priceChanged = oldPrice != salePriceCents;
 
-    final specialAuthorization = SpecialAuthorizationService(_db);
-
     PreparedSpecialAuthorization? preparedPriceAuthorization;
 
     if (priceChanged) {
@@ -196,18 +220,29 @@ final class CatalogRepository {
     final now = DateTime.now().toUtc().toIso8601String();
 
     await _db.criticalTransaction((tx) async {
-      Map<String, Object?>? authorizationMetadata;
+      final writeAuthorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: preparedWriteAuthorization,
+            effective: authorization,
+            capability: Capability.productWrite,
+            operation: 'UpdateProduct',
+            entityType: 'Product',
+            entityGlobalId: productGlobalId,
+          );
+      Map<String, Object?>? priceAuthorizationMetadata;
 
       if (preparedPriceAuthorization != null) {
-        authorizationMetadata = await specialAuthorization.consumeInTransaction(
-          tx,
-          prepared: preparedPriceAuthorization,
-          effective: authorization,
-          capability: Capability.productPriceChange,
-          operation: 'UpdateProductPrice',
-          entityType: 'Product',
-          entityGlobalId: productGlobalId,
-        );
+        priceAuthorizationMetadata = await specialAuthorization
+            .consumeInTransaction(
+              tx,
+              prepared: preparedPriceAuthorization,
+              effective: authorization,
+              capability: Capability.productPriceChange,
+              operation: 'UpdateProductPrice',
+              entityType: 'Product',
+              entityGlobalId: productGlobalId,
+            );
       }
 
       final updated = await tx.update(
@@ -252,7 +287,8 @@ final class CatalogRepository {
           'minimumStock': minimumStock,
           'active': active,
           'updatedAt': now,
-          'authorization': ?authorizationMetadata,
+          'authorization': ?writeAuthorizationMetadata,
+          'priceAuthorization': ?priceAuthorizationMetadata,
         }),
         'created_at': now,
       });
@@ -324,13 +360,30 @@ final class CatalogRepository {
     Capability capability,
     String type,
     String table,
-    Map<String, Object?> values,
-  ) async {
-    final authorization = await AuthorizationService(_db).require(capability);
+    Map<String, Object?> values, {
+    SpecialAuthorizationGrant? authorizationGrant,
+  }) async {
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: capability,
+      grant: authorizationGrant,
+    );
     final ctx = authorization.context!;
     final now = DateTime.now().toUtc().toIso8601String();
     final gid = _ids.newId();
     await _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: capability,
+            operation: 'Create$type',
+            entityType: type,
+            entityGlobalId: gid,
+          );
       final row = {
         'global_id': gid,
         'business_id': ctx.businessId,
@@ -343,6 +396,7 @@ final class CatalogRepository {
         'globalId': gid,
         'businessGlobalId': ctx.businessGlobalId,
         'serverVersion': 0,
+        'authorization': ?authorizationMetadata,
         'updatedAt': now,
       };
       for (final e in values.entries) {

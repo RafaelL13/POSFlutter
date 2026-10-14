@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 import 'package:pos_app/features/catalog/data/catalog_repository.dart';
 import 'package:pos_app/shared/presentation/database_list_screen.dart';
 
@@ -13,9 +15,19 @@ class CategoriesScreen extends StatelessWidget {
     query: 'SELECT id,name,description,active FROM categories ORDER BY name',
     action: (c) async {
       final v = await textForm(c, 'Nueva categoría', ['Nombre']);
+      if (!c.mounted) return false;
+      if (!c.mounted) return false;
       if (v != null && v.first.trim().isNotEmpty) {
-        await CatalogRepository(appDatabase).addCategory(v.first);
-        return true;
+        return runWithSpecialAuthorization(
+          context: c,
+          capability: Capability.categoryWrite,
+          operationLabel: 'Nueva categoría',
+          reason: 'Alta: ${v.first.trim()}',
+          operation: (grant) async {
+            await CatalogRepository(appDatabase)
+                .addCategory(v.first, authorizationGrant: grant);
+          },
+        );
       }
       return false;
     },
