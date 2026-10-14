@@ -112,7 +112,7 @@ void main() {
     },
   );
 
-  test('seller cannot create manual cash movements', () async {
+  test('seller requires authorization for manual cash movements', () async {
     final fixture = await _CashFixture.create(role: 'Seller');
     addTearDown(fixture.dispose);
     final repository = CashRepository(fixture.database);
@@ -123,9 +123,9 @@ void main() {
         repository.addManualMovement(
           type: type,
           amountCents: 100,
-          reason: 'No permitido',
+          reason: 'Sin autorizacion',
         ),
-        throwsA(isA<AuthorizationDeniedException>()),
+        throwsA(isA<AdditionalAuthorizationRequiredException>()),
       );
     }
 

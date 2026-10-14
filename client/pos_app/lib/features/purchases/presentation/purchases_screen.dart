@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 import 'package:pos_app/core/design/app_spacing.dart';
 import 'package:pos_app/core/design/components/app_components.dart';
 import 'package:pos_app/core/utils/money.dart';
@@ -147,21 +149,30 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             _PurchaseDialog(suppliers: suppliers, products: products),
       );
       if (draft == null) return;
-      await PurchaseRepository(appDatabase).create(
-        supplierId: draft.supplier.id,
-        supplierGlobalId: draft.supplier.globalId,
-        reference: draft.reference,
-        lines: draft.lines
-            .map(
-              (line) => PurchaseLineInput(
-                line.product.id,
-                line.product.globalId,
-                line.quantity,
-                line.unitCostCents,
-              ),
-            )
-            .toList(),
+      if (!mounted) return;
+      final completed = await runWithSpecialAuthorization(
+        context: context,
+        capability: Capability.purchaseCreate,
+        operationLabel: 'Registrar compra',
+        reason: draft.reference ?? 'Compra de mercancía',
+        operation: (grant) async => PurchaseRepository(appDatabase).create(
+          supplierId: draft.supplier.id,
+          supplierGlobalId: draft.supplier.globalId,
+          reference: draft.reference,
+          lines: draft.lines
+              .map(
+                (line) => PurchaseLineInput(
+                  line.product.id,
+                  line.product.globalId,
+                  line.quantity,
+                  line.unitCostCents,
+                ),
+              )
+              .toList(),
+          authorizationGrant: grant,
+        ),
       );
+      if (!completed) return;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

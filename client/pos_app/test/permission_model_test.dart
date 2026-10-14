@@ -210,7 +210,7 @@ void main() {
       );
       expect(
         RolePolicy.permissionFor(AppRole.seller, Capability.purchaseCreate),
-        PermissionLevel.full,
+        PermissionLevel.requiresAuthorization,
       );
       expect(
         RolePolicy.permissionFor(AppRole.seller, Capability.purchaseRead),
@@ -239,10 +239,6 @@ void main() {
 
     test('cannot perform administrative operations', () {
       for (final capability in <Capability>[
-        Capability.expenseCreate,
-        Capability.productWrite,
-        Capability.categoryWrite,
-        Capability.supplierWrite,
         Capability.inventoryAdjust,
         Capability.usersWrite,
         Capability.devicesWrite,
@@ -276,6 +272,39 @@ void main() {
           reason: capability.name,
         );
       }
+    });
+    test('P019 delegated permissions require second-user authorization', () {
+      for (final capability in <Capability>[
+        Capability.productWrite,
+        Capability.productPriceChange,
+        Capability.categoryWrite,
+        Capability.supplierWrite,
+        Capability.purchaseCreate,
+        Capability.expenseCreate,
+        Capability.cashDeposit,
+        Capability.cashWithdrawal,
+      ]) {
+        expect(
+          RolePolicy.permissionFor(AppRole.seller, capability),
+          PermissionLevel.requiresAuthorization,
+          reason: capability.name,
+        );
+      }
+      expect(
+        RolePolicy.permissionFor(AppRole.seller, Capability.reportsOperational),
+        PermissionLevel.ownOnly,
+      );
+      expect(
+        RolePolicy.permissionFor(AppRole.seller, Capability.inventoryAdjust),
+        PermissionLevel.none,
+      );
+      expect(
+        RolePolicy.permissionFor(
+          AppRole.seller,
+          Capability.initialInventoryImport,
+        ),
+        PermissionLevel.none,
+      );
     });
   });
 
@@ -376,6 +405,6 @@ void main() {
   });
 
   test('authorization policy version is defined', () {
-    expect(authorizationPolicyVersion, 3);
+    expect(authorizationPolicyVersion, 4);
   });
 }

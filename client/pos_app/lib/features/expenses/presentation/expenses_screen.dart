@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pos_app/core/app_services.dart';
+import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 import 'package:pos_app/core/utils/money.dart';
 import 'package:pos_app/features/expenses/data/expense_read_repository.dart';
 import 'package:pos_app/features/expenses/data/expense_repository.dart';
@@ -22,10 +24,18 @@ class ExpensesScreen extends StatelessWidget {
         'Monto (MXN)',
       ]);
       if (values != null) {
-        await ExpenseRepository(
-          appDatabase,
-        ).create(concept: values[0], amountCents: parseMoneyToCents(values[1]));
-        return true;
+        if (!dialogContext.mounted) return false;
+        return runWithSpecialAuthorization(
+          context: dialogContext,
+          capability: Capability.expenseCreate,
+          operationLabel: 'Registrar gasto',
+          reason: values[0],
+          operation: (grant) async => ExpenseRepository(appDatabase).create(
+            concept: values[0],
+            amountCents: parseMoneyToCents(values[1]),
+            authorizationGrant: grant,
+          ),
+        );
       }
       return false;
     },

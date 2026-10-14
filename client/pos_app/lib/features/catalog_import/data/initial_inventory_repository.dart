@@ -22,10 +22,10 @@ final class InitialInventoryRepository {
       throw StateError('Corrige todos los errores antes de importar.');
     }
     final effective = await AuthorizationService(_database).load();
+    effective.require(Capability.initialInventoryImport);
     effective.require(Capability.productWrite);
     effective.require(Capability.categoryWrite);
     effective.require(Capability.supplierWrite);
-    effective.require(Capability.initialInventoryImport);
     final ctx = effective.context!;
     final now = DateTime.now().toUtc().toIso8601String();
     final importGid = _ids.newId();

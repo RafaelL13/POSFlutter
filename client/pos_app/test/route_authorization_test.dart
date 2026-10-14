@@ -56,16 +56,11 @@ void main() {
           '/inventory',
           '/sales',
           '/cash',
+          '/reports',
         ]) {
           expect(RouteAuthorization.redirect(path, access), isNull);
         }
-        for (final path in [
-          '/expenses',
-          '/reports',
-          '/users',
-          '/backup',
-          '/cloud-admin',
-        ]) {
+        for (final path in ['/expenses', '/users', '/backup', '/cloud-admin']) {
           expect(RouteAuthorization.redirect(path, access), '/dashboard');
         }
       },

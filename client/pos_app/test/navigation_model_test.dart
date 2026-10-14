@@ -32,11 +32,11 @@ void main() {
           'Proveedores',
           'Compras',
           'Inventario',
+          'Reportes',
         ]),
       );
       for (final hidden in [
         'Gastos',
-        'Reportes',
         'Usuarios',
         'Respaldos',
         'Administración nube',

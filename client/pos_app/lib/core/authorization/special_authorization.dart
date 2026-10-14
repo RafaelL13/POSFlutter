@@ -103,7 +103,13 @@ final class SpecialAuthorizationService {
     Capability.inventoryAdjust ||
     Capability.cashCloseWithDifference ||
     Capability.cashWithdrawal ||
-    Capability.productPriceChange =>
+    Capability.cashDeposit ||
+    Capability.productPriceChange ||
+    Capability.productWrite ||
+    Capability.categoryWrite ||
+    Capability.supplierWrite ||
+    Capability.purchaseCreate ||
+    Capability.expenseCreate =>
       SpecialAuthorizationRequirement.secondUserAuthorization,
     Capability.backupRestore =>
       SpecialAuthorizationRequirement.reauthentication,

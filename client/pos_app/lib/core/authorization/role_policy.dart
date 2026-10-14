@@ -2,7 +2,7 @@ import 'app_role.dart';
 import 'capability.dart';
 import 'device_mode.dart';
 
-const authorizationPolicyVersion = 3;
+const authorizationPolicyVersion = 4;
 
 enum PermissionLevel { none, ownOnly, read, full, requiresAuthorization }
 
@@ -137,14 +137,14 @@ abstract final class RolePolicy {
     return switch (capability) {
       Capability.posAccess ||
       Capability.saleCreate ||
-      Capability.purchaseCreate ||
       Capability.syncPush ||
       Capability.syncPull => PermissionLevel.full,
 
       Capability.saleHistory ||
       Capability.cashOpen ||
       Capability.cashRead ||
-      Capability.cashClose => PermissionLevel.ownOnly,
+      Capability.cashClose ||
+      Capability.reportsOperational => PermissionLevel.ownOnly,
 
       Capability.productRead ||
       Capability.categoryRead ||
@@ -154,10 +154,18 @@ abstract final class RolePolicy {
 
       Capability.saleCancel ||
       Capability.saleDiscount ||
-      Capability.cashCloseWithDifference =>
-        PermissionLevel.requiresAuthorization,
+      Capability.cashCloseWithDifference ||
+      Capability.productWrite ||
+      Capability.productPriceChange ||
+      Capability.categoryWrite ||
+      Capability.supplierWrite ||
+      Capability.purchaseCreate ||
+      Capability.expenseCreate ||
+      Capability.cashDeposit ||
+      Capability.cashWithdrawal => PermissionLevel.requiresAuthorization,
 
-      Capability.initialInventoryImport => PermissionLevel.none,
+      Capability.initialInventoryImport ||
+      Capability.inventoryAdjust => PermissionLevel.none,
 
       _ => PermissionLevel.none,
     };

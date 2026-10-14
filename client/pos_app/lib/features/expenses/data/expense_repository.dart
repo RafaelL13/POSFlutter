@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 
@@ -15,14 +16,30 @@ final class ExpenseRepository {
     required int amountCents,
     String paymentMethod = 'Cash',
     String? category,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     if (amountCents <= 0) throw ArgumentError('Monto inválido.');
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.expenseCreate);
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.expenseCreate,
+      grant: authorizationGrant,
+    );
     final ctx = authorization.context!;
     final now = DateTime.now().toUtc().toIso8601String();
     final gid = _ids.newId();
     await _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.expenseCreate,
+            operation: 'Create',
+            entityType: 'Expense',
+            entityGlobalId: gid,
+          );
       await tx.insert('expenses', {
         'global_id': gid,
         'expense_date': now,
@@ -73,6 +90,7 @@ final class ExpenseRepository {
           'category': category,
           'amountCents': amountCents,
           'paymentMethod': paymentMethod,
+          'authorization': ?authorizationMetadata,
         }),
         'created_at': now,
       });

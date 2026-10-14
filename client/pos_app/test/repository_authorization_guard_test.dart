@@ -39,37 +39,48 @@ const _mutationTables = <String>[
 void main() {
   sqfliteFfiInit();
 
-  test('Seller denied writes leave SQLite and SyncQueue unchanged', () async {
-    final database = await _database(role: 'Seller');
-    addTearDown(database.close);
-
-    await _expectDenied(
-      ExpenseRepository(database)
-          .create(concept: 'Denied', amountCents: 100, paymentMethod: 'Card'),
-    );
-    await _expectDenied(
-      CatalogRepository(database).addProduct(
-        code: 'P1',
-        name: 'Denied',
-        categoryId: 999,
-        salePriceCents: 100,
-      ),
-    );
-    await _expectDenied(CatalogRepository(database).addCategory('Denied'));
-    await _expectDenied(CatalogRepository(database).addSupplier('Denied'));
-    await _expectDenied(
-      InventoryRepository(database)
-          .adjust(productId: 999, delta: 1, reason: 'Denied'),
-    );
-    await _expectDenied(LocalBackupProvider(database).createBackup());
-
-    expect(await _counts(database), everyElement(0));
-  });
-
   test(
-    'Seller registers and reads an offline purchase with FIFO stock',
+    'Seller unauthorized writes leave SQLite and SyncQueue unchanged',
     () async {
       final database = await _database(role: 'Seller');
+      addTearDown(database.close);
+
+      await expectLater(
+        ExpenseRepository(database)
+            .create(concept: 'Denied', amountCents: 100, paymentMethod: 'Card'),
+        throwsA(isA<AdditionalAuthorizationRequiredException>()),
+      );
+      await expectLater(
+        CatalogRepository(database).addProduct(
+          code: 'P1',
+          name: 'Denied',
+          categoryId: 999,
+          salePriceCents: 100,
+        ),
+        throwsA(isA<AdditionalAuthorizationRequiredException>()),
+      );
+      await expectLater(
+        CatalogRepository(database).addCategory('Denied'),
+        throwsA(isA<AdditionalAuthorizationRequiredException>()),
+      );
+      await expectLater(
+        CatalogRepository(database).addSupplier('Denied'),
+        throwsA(isA<AdditionalAuthorizationRequiredException>()),
+      );
+      await _expectDenied(
+        InventoryRepository(database)
+            .adjust(productId: 999, delta: 1, reason: 'Denied'),
+      );
+      await _expectDenied(LocalBackupProvider(database).createBackup());
+
+      expect(await _counts(database), everyElement(0));
+    },
+  );
+
+  test(
+    'Manager registers and reads an offline purchase with FIFO stock',
+    () async {
+      final database = await _database(role: 'Manager');
       addTearDown(database.close);
       final db = await database.open();
       final now = DateTime.utc(2026, 9, 13).toIso8601String();
@@ -134,7 +145,7 @@ void main() {
       expect(movements.single['new_stock'], 4);
       expect(queued, hasLength(1));
       expect(visible.single['global_id'], purchaseGlobalId);
-      expect(visible.single, isNot(contains('total_cents')));
+      expect(visible.single['total_cents'], 500);
     },
   );
 

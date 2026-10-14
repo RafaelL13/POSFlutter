@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:pos_app/core/authorization/authorization_service.dart';
 import 'package:pos_app/core/authorization/capability.dart';
+import 'package:pos_app/core/authorization/special_authorization.dart';
 import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 
@@ -28,17 +29,33 @@ final class PurchaseRepository {
     required String supplierGlobalId,
     required List<PurchaseLineInput> lines,
     String? reference,
+    SpecialAuthorizationGrant? authorizationGrant,
   }) async {
     if (lines.isEmpty) throw StateError('La compra no puede estar vacía.');
     if (lines.any((e) => e.quantity <= 0 || e.unitCostCents < 0)) {
       throw StateError('Cantidad/costo inválido.');
     }
-    final authorization = await AuthorizationService(_db)
-        .require(Capability.purchaseCreate);
+    final authorization = await AuthorizationService(_db).load();
+    final specialAuthorization = SpecialAuthorizationService(_db);
+    final prepared = await specialAuthorization.prepare(
+      effective: authorization,
+      capability: Capability.purchaseCreate,
+      grant: authorizationGrant,
+    );
     final ctx = authorization.context!;
     final now = DateTime.now().toUtc().toIso8601String();
     final gid = _ids.newId();
     return _db.criticalTransaction((tx) async {
+      final authorizationMetadata = await specialAuthorization
+          .consumeInTransaction(
+            tx,
+            prepared: prepared,
+            effective: authorization,
+            capability: Capability.purchaseCreate,
+            operation: 'Create',
+            entityType: 'Purchase',
+            entityGlobalId: gid,
+          );
       final total = lines.fold<int>(
         0,
         (s, l) => s + l.quantity * l.unitCostCents,
@@ -122,6 +139,7 @@ final class PurchaseRepository {
           'reference': reference,
           'totalCents': total,
           'lines': payloadLines,
+          'authorization': ?authorizationMetadata,
         }),
         'created_at': now,
       });

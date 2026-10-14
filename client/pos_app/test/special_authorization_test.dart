@@ -458,7 +458,13 @@ void main() {
           salePriceCents: 175,
           authorizationGrant: priceGrant,
         ),
-        throwsA(isA<AuthorizationDeniedException>()),
+        throwsA(
+          isA<SpecialAuthorizationException>().having(
+            (error) => error.failure,
+            'failure',
+            SpecialAuthorizationFailure.invalidGrant,
+          ),
+        ),
       );
 
       await fixture.useActor('manager');
