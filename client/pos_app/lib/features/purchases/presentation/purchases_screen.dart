@@ -377,11 +377,11 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
   );
   void _addLine() {
     final units = int.tryParse(quantity.text.trim());
-    int unitCost;
+    int? unitCost;
     try {
-      unitCost = parseMoneyToCents(cost.text);
+      unitCost = parseMoneyToCents(cost.text.trim());
     } catch (_) {
-      unitCost = 0;
+      unitCost = null;
     }
     if (product == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -389,16 +389,19 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
       );
       return;
     }
-    if (units == null || units <= 0 || unitCost <= 0) {
+    if (units == null || units <= 0 || unitCost == null || unitCost < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Ingresa cantidad y costo mayores que cero.'),
+          content: Text(
+            'Ingresa una cantidad mayor que cero y un costo válido. '
+            'Se permite costo \$0 para mercancía sin cargo de adquisición.',
+          ),
         ),
       );
       return;
     }
     setState(() {
-      lines.add(_PurchaseLineDraft(product!, units, unitCost));
+      lines.add(_PurchaseLineDraft(product!, units, unitCost!));
       quantity.text = '1';
       cost.clear();
     });

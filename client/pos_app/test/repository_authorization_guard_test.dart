@@ -149,6 +149,78 @@ void main() {
     },
   );
 
+  test(
+    'Manager registers zero-cost offline purchase with FIFO stock',
+    () async {
+      final database = await _database(role: 'Manager');
+      addTearDown(database.close);
+      final db = await database.open();
+      final now = DateTime.utc(2026, 9, 13).toIso8601String();
+      final businessId = (await db.query('businesses')).single['id']! as int;
+      final supplierId = await db.insert('suppliers', {
+        'global_id': 'zero-cost-supplier',
+        'business_id': businessId,
+        'name': 'Proveedor existente',
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+      final productId = await db.insert('products', {
+        'global_id': 'zero-cost-product',
+        'business_id': businessId,
+        'code': 'ZERO-1',
+        'name': 'Producto existente',
+        'sale_price_cents': 250,
+        'minimum_stock': 0,
+        'active': 1,
+        'created_at': now,
+        'updated_at': now,
+      });
+
+      final catalog = OperationalCatalogRepository(database);
+      expect((await catalog.suppliers()).single.globalId, 'zero-cost-supplier');
+      expect((await catalog.products()).single.globalId, 'zero-cost-product');
+
+      final purchaseGlobalId = await PurchaseRepository(database).create(
+        supplierId: supplierId,
+        supplierGlobalId: 'zero-cost-supplier',
+        lines: [PurchaseLineInput(productId, 'zero-cost-product', 4, 0)],
+        reference: 'Entrada sin costo desde procesadora',
+      );
+
+      final purchase = (await db.query(
+        'purchases',
+        where: 'global_id=?',
+        whereArgs: [purchaseGlobalId],
+      )).single;
+      final lots = await db.query(
+        'inventory_lots',
+        where: 'product_id=?',
+        whereArgs: [productId],
+      );
+      final movements = await db.query(
+        'inventory_movements',
+        where: 'reference_global_id=?',
+        whereArgs: [purchaseGlobalId],
+      );
+      final queued = await db.query(
+        'sync_queue',
+        where: "entity_type='Purchase' AND entity_global_id=?",
+        whereArgs: [purchaseGlobalId],
+      );
+      final visible = await PurchaseReadRepository(database).list();
+
+      expect(purchase['total_cents'], 0);
+      expect(lots.single['initial_quantity'], 4);
+      expect(lots.single['available_quantity'], 4);
+      expect(lots.single['unit_cost_cents'], 0);
+      expect(movements.single['new_stock'], 4);
+      expect(queued, hasLength(1));
+      expect(visible.single['global_id'], purchaseGlobalId);
+      expect(visible.single['total_cents'], 0);
+    },
+  );
+
   test('Supervisor catalog writes leave SQLite unchanged', () async {
     final database = await _database(role: 'Supervisor');
     addTearDown(database.close);
