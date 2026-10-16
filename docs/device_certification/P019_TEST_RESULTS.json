@@ -1,0 +1,48 @@
+{
+  "phase": "P019",
+  "date": "2026-10-15",
+  "branch": "feature/p019-seller-authorizations",
+  "headInitial": "89fb4b021bf2a24bbcde25a45ea072cc9dbed552",
+  "controls": {
+    "dartFormat": "PASS",
+    "flutterAnalyze": "PASS",
+    "flutterTargetedTests": { "status": "PASS", "count": 28 },
+    "flutterFullSuite": { "status": "PASS", "count": 439 },
+    "backendTargetedTests": { "status": "PASS", "count": 20 },
+    "backendBuild": "PASS",
+    "backendFullSuite": { "status": "PASS", "count": 114 },
+    "structuralGate": "PASS",
+    "sqliteValidation": "PASS",
+    "highConfidenceSecrets": 0,
+    "androidReadOnlyDeviceCheck": "PASS",
+    "physicalMutatingUat": "NOT_VERIFIED"
+  },
+  "zeroCostPurchase": "PASS",
+  "fifoSaleE2e": "PASS",
+  "sqlitePersistence": "PASS",
+  "initialInventoryIdempotency": "PASS",
+  "centralTransferIdempotency": "PASS",
+  "apk": {
+    "path": "client/pos_app/build/app/outputs/flutter-apk/app-release.apk",
+    "sha256": "C6BA6B104C1CBD8938279FDA487E8EEC34E253D9422DD1EFA9EF0A37DED30175",
+    "package": "com.posflutter.pos_app",
+    "versionName": "1.1.2",
+    "versionCode": 7,
+    "signatureSchemeV2": "PASS",
+    "certificateSha256": "1190414E227223377C1DAB5C199A0C3ECA70B57F193B27F82BE082C97843EFC4"
+  },
+  "device": {
+    "model": "S12-A",
+    "serial": "MTK0002606301100350",
+    "android": "10",
+    "adb": "PASS",
+    "packageInstalled": "PASS",
+    "foreground": "PASS"
+  },
+  "productionDataWrites": "NOT_ATTEMPTED",
+  "sourceCodeMutatedByCertification": false,
+  "sqlMutated": false,
+  "iisMutated": false,
+  "tabletDataCleared": false,
+  "status": "PARTIAL"
+}
