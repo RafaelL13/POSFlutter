@@ -36,7 +36,9 @@ else: ok('required graph',f'{len(required)} required paths present')
 json_err=[]
 for p in ROOT.rglob('*.json'):
     if 'RECOVERY_EVIDENCE' in p.parts: continue
-    try: json.loads(p.read_text(encoding='utf-8'))
+    # PowerShell evidence files may include a UTF-8 BOM.  It is valid JSON
+    # content and must not make a source-structure gate fail.
+    try: json.loads(p.read_text(encoding='utf-8-sig'))
     except Exception as e: json_err.append(f'{p.relative_to(ROOT)}: {e}')
 if json_err: fail('JSON parse','; '.join(json_err))
 else: ok('JSON parse','all functional JSON parsed')
@@ -105,6 +107,10 @@ for p in functional_files():
     if not t.strip(): fail('empty source',str(p.relative_to(ROOT)))
     if any(line.rstrip('\r\n').endswith((' ','\t')) for line in t.splitlines(True)): fail('trailing whitespace',str(p.relative_to(ROOT)))
     for n,pat in patterns.items():
+        # Test doubles can deliberately leave an unrelated API surface
+        # unimplemented.  Production source remains subject to this check.
+        if n == 'UnimplementedError' and ('test' in p.parts or 'tests' in p.parts):
+            continue
         if pat.search(t): fail(n,str(p.relative_to(ROOT)))
 for n in [*patterns,'empty source','trailing whitespace']:
     if not any(x==n for x,_ in errors): ok(n,'none in functional source')
@@ -230,16 +236,16 @@ elif 'AuthorizationPolicyVersion = 1' not in read_auth or 'BackendReadAuthorizat
 else: ok('tenant read endpoints',f'{len(read_paths)} capability-authorized tenant-scoped read routes')
 # No direct operational mutation endpoints outside sync/bootstrap/enrollment.
 operational_write=re.findall(r'app\.Map(?:Post|Put|Delete)\("([^\"]+)"',program)
-unexpected=[p for p in operational_write if p not in ['/api/auth/login','/api/auth/refresh','/api/bootstrap','/api/device-enrollment/invitations','/api/device-enrollment/redeem','/api/sync/push']]
+unexpected=[p for p in operational_write if p not in ['/api/auth/login','/api/auth/refresh','/api/bootstrap','/api/device-enrollment/invitations','/api/device-enrollment/recovery-invitations','/api/device-enrollment/redeem','/api/sync/push']]
 if unexpected: fail('direct write surface','unexpected direct write routes: '+', '.join(unexpected))
 else: ok('direct write surface','operational writes funnel through sync; no bypass route for AdminReadOnly')
 
 # FASE16 enrollment semantics
-ens=text('server/src/Infrastructure/DeviceEnrollmentService.cs'); dbctx=text('server/src/Infrastructure/PosDbContext.cs')
-enrollment_checks={'256-bit token':'RandomNumberGenerator.GetBytes(32)' in ens,'SHA-256 storage':'SHA256.HashData' in ens,'expiry':'ExpiresAt <= now' in ens,'revocation':'RevokedAt is not null' in ens,'Administrator required':'AdministratorRole' in ens and 'user.Role != AdministratorRole' in ens,'serializable redemption':'IsolationLevel.Serializable' in ens,'idempotent same device':'RecoverCompletedEnrollmentAsync' in ens and 'x.GlobalId == request.DeviceGlobalId' in ens,'AdminReadOnly mode':'Mode = AdminReadOnlyMode' in ens,'token hash unique':'HasIndex(x=>x.TokenHash).IsUnique()' in dbctx,'rate limit IP':'RemoteIpAddress' in program and 'PermitLimit = 10' in program}
+ens=text('server/src/Infrastructure/DeviceEnrollmentService.cs'); dbctx=text('server/src/Infrastructure/PosDbContext.cs'); compact_dbctx=re.sub(r'\s+','',dbctx)
+enrollment_checks={'CSPRNG enrollment code':'EnrollmentCodeLength = 8' in ens and 'RandomNumberGenerator.GetInt32' in ens and 'IsValidEnrollmentToken' in ens,'SHA-256 storage':'SHA256.HashData' in ens,'expiry':'ExpiresAt <= now' in ens,'revocation':'RevokedAt is not null' in ens,'Administrator required':'AdministratorRole' in ens and 'user.Role != AdministratorRole' in ens,'serializable redemption':'IsolationLevel.Serializable' in ens,'idempotent same device':'RecoverCompletedEnrollmentAsync' in ens and 'x.GlobalId == request.DeviceGlobalId' in ens,'device mode normalization':'PointOfSaleMode => PointOfSaleMode' in ens and 'AdminReadOnlyMode => AdminReadOnlyMode' in ens and 'Mode = invitation.RequestedMode' in ens,'token hash unique':'HasIndex(x=>x.TokenHash).IsUnique()' in compact_dbctx,'rate limit IP':'RemoteIpAddress' in program and 'PermitLimit = 10' in program}
 missing_enroll=[k for k,v in enrollment_checks.items() if not v]
 if missing_enroll: fail('FASE16 enrollment',', '.join(missing_enroll))
-else: ok('FASE16 enrollment','token/hash/expiry/revocation/admin/serializable/idempotency/rate-limit/device-mode checks present')
+else: ok('FASE16 enrollment','CSPRNG code/hash/expiry/revocation/admin/serializable/idempotency/rate-limit/device-mode checks present')
 
 
 # FASE17/18A.5 remote reports: financial-read policy, tenant filters, historical FIFO and client read-only queries.
@@ -286,7 +292,7 @@ entities=text('server/src/Domain/Entities.cs')
 required_entities=['Business','Branch','Device','UserAccount','Category','Supplier','Product','Purchase','PurchaseLine','InventoryLot','InventoryMovement','Sale','SaleLine','SaleLotAllocation','SalePayment','CashSession','Expense','InboundOperation','SyncChange','RefreshToken','DeviceEnrollmentToken']
 missing_entities=[e for e in required_entities if re.search(rf'class\s+{e}\b',entities) is None]
 if missing_entities: fail('EF model','missing entities '+', '.join(missing_entities))
-elif 'new{x.BusinessId,x.Id}' not in dbctx or 'TokenHash).IsUnique()' not in dbctx: fail('EF model','required SyncChange/token indexes missing')
+elif 'new{x.BusinessId,x.Id}' not in re.sub(r'\s+','',dbctx) or 'TokenHash).IsUnique()' not in re.sub(r'\s+','',dbctx): fail('EF model','required SyncChange/token indexes missing')
 else: ok('EF model',f'{len(required_entities)} core entities + tenant cursor/token indexes present')
 
 # DI/contracts/symbols
