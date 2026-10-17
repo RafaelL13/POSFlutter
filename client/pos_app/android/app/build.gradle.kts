@@ -128,6 +128,9 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".p020lab"
+        }
         release {
             signingConfigs.findByName("release")?.let {
                 signingConfig = it
