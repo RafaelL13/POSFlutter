@@ -8,6 +8,7 @@ import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/sync/sync_operation.dart';
 import 'package:pos_app/sync/sync_pull.dart';
+import 'package:pos_app/sync/web_sale_inventory_applier.dart';
 import 'package:pos_app/sync/sync_error.dart';
 import 'package:pos_app/sync/sync_health.dart';
 
@@ -320,7 +321,7 @@ final class SyncRepository {
     await AuthorizationService(_database).require(Capability.syncPush);
     final db = await _database.open();
     await db.rawUpdate(
-      "UPDATE sync_queue SET status = 'Pending', error_message = 'Reintento después de cierre inesperado.', error_category = NULL, error_code = NULL, requires_action = 0 WHERE status = 'Syncing'",
+      "UPDATE sync_queue SET status = 'Pending', error_message = 'Reintento despuÃ©s de cierre inesperado.', error_category = NULL, error_code = NULL, requires_action = 0 WHERE status = 'Syncing'",
     );
   }
 
@@ -429,7 +430,7 @@ final class SyncRepository {
       final current = await _cursorInTransaction(tx);
       if (batch.nextCursor < current) {
         throw StateError(
-          'El servidor devolvió un cursor anterior al cursor local.',
+          'El servidor devolviÃ³ un cursor anterior al cursor local.',
         );
       }
       if (batch.nextCursor == current) {
@@ -441,7 +442,7 @@ final class SyncRepository {
         return;
       }
       if (batch.changes.isEmpty) {
-        throw StateError('El servidor avanzó el cursor sin entregar cambios.');
+        throw StateError('El servidor avanzÃ³ el cursor sin entregar cambios.');
       }
 
       var previousCursor = current;
@@ -449,7 +450,7 @@ final class SyncRepository {
         if (change.cursor <= current) continue;
         if (change.cursor <= previousCursor) {
           throw StateError(
-            'Los cambios remotos no están ordenados por cursor ascendente.',
+            'Los cambios remotos no estÃ¡n ordenados por cursor ascendente.',
           );
         }
         if (change.cursor > batch.nextCursor) {
@@ -462,7 +463,7 @@ final class SyncRepository {
           .toList(growable: false);
       if (effective.isEmpty || effective.last.cursor != batch.nextCursor) {
         throw StateError(
-          'El cursor final no coincide con el último cambio del lote.',
+          'El cursor final no coincide con el Ãºltimo cambio del lote.',
         );
       }
 
@@ -498,8 +499,36 @@ final class SyncRepository {
   ) async {
     if (change.operation != 'Create' && change.operation != 'Update') {
       throw StateError(
-        'Operación pull no soportada: ${change.entityType}/${change.operation}.',
+        'OperaciÃ³n pull no soportada: ${change.entityType}/${change.operation}.',
       );
+    }
+
+    if (change.entityType == 'WebSaleInventory') {
+      if (change.version != 1 || change.operation != 'Create') {
+        throw StateError('WebSaleInventory version or operation unsupported.');
+      }
+      final business = change.payload['businessGlobalId']?.toString();
+      if (business != context.businessGlobalId ||
+          change.payload['globalId']?.toString().toLowerCase() !=
+              change.entityGlobalId.toLowerCase()) {
+        throw StateError('Web sale tenant/event identity mismatch.');
+      }
+      // Other branches must not change local stock.
+      if (change.payload['branchGlobalId']?.toString() != context.branchGlobalId) {
+        return;
+      }
+      await WebSaleInventoryApplier.apply(
+        tx,
+        payload: change.payload,
+        eventGlobalId: change.entityGlobalId,
+        businessGlobalId: context.businessGlobalId,
+        branchGlobalId: context.branchGlobalId,
+        branchId: context.branchId,
+        userId: context.userId,
+        deviceId: context.deviceId,
+        changedAt: change.changedAt.toIso8601String(),
+      );
+      return;
     }
 
     _validateRemoteBusiness(change, context.businessGlobalId);
@@ -576,7 +605,7 @@ final class SyncRepository {
 
     final lines = payload['lines'];
     if (lines is! List || lines.isEmpty) {
-      throw StateError('El traspaso central remoto no contiene líneas.');
+      throw StateError('El traspaso central remoto no contiene lÃ­neas.');
     }
     final movementDate = _requiredDate(payload, 'date');
     final seenLots = <String>{};
@@ -584,7 +613,7 @@ final class SyncRepository {
 
     for (final rawLine in lines) {
       if (rawLine is! Map) {
-        throw StateError('Una línea del traspaso central remoto es inválida.');
+        throw StateError('Una lÃ­nea del traspaso central remoto es invÃ¡lida.');
       }
       final line = Map<String, Object?>.from(rawLine);
       final productGlobalId = _requiredString(line, 'productGlobalId');
@@ -690,7 +719,7 @@ final class SyncRepository {
   ) async {
     if (change.entityGlobalId != context.businessGlobalId) {
       throw StateError(
-        'El servidor intentó aplicar otro negocio en esta base local.',
+        'El servidor intentÃ³ aplicar otro negocio en esta base local.',
       );
     }
     final payload = change.payload;
@@ -778,7 +807,7 @@ final class SyncRepository {
     );
     if (branchRows.isEmpty) {
       throw StateError(
-        'El dispositivo remoto referencia una sucursal aún no disponible localmente.',
+        'El dispositivo remoto referencia una sucursal aÃºn no disponible localmente.',
       );
     }
     final rows = await tx.query(
@@ -825,7 +854,7 @@ final class SyncRepository {
       'Supervisor',
       'Manager',
     }.contains(role)) {
-      throw StateError('El servidor devolvió un rol de usuario no soportado.');
+      throw StateError('El servidor devolviÃ³ un rol de usuario no soportado.');
     }
     final rows = await tx.query(
       'users',
@@ -957,7 +986,7 @@ final class SyncRepository {
       );
       if (categories.isEmpty) {
         throw StateError(
-          'El producto remoto referencia una categoría aún no disponible localmente.',
+          'El producto remoto referencia una categorÃ­a aÃºn no disponible localmente.',
         );
       }
       categoryId = categories.first['id']! as int;
@@ -1049,7 +1078,7 @@ final class SyncRepository {
       'sync_queue',
       {
         'status': 'Error',
-        'error_message': 'Existe un conflicto pendiente de resolución.',
+        'error_message': 'Existe un conflicto pendiente de resoluciÃ³n.',
         'error_category': SyncErrorCategory.conflict.storageValue,
         'error_code': 'PullConflict',
         'requires_action': 1,
@@ -1110,7 +1139,7 @@ final class SyncRepository {
     };
     if (payloadBusiness?.toString() != localBusinessGlobalId) {
       throw StateError(
-        'El servidor devolvió un cambio perteneciente a otro negocio.',
+        'El servidor devolviÃ³ un cambio perteneciente a otro negocio.',
       );
     }
     if (change.payload['globalId']?.toString() != change.entityGlobalId) {
@@ -1121,7 +1150,7 @@ final class SyncRepository {
     final payloadVersion = change.payload['serverVersion'];
     if (payloadVersion is! num || payloadVersion.toInt() != change.version) {
       throw StateError(
-        'La versión del payload remoto no coincide con el cambio.',
+        'La versiÃ³n del payload remoto no coincide con el cambio.',
       );
     }
   }
@@ -1159,7 +1188,7 @@ final class SyncRepository {
     if (value is! num ||
         value % 1 != 0 ||
         (allowZero ? value < 0 : value <= 0)) {
-      throw StateError('El campo remoto $key debe ser un entero válido.');
+      throw StateError('El campo remoto $key debe ser un entero vÃ¡lido.');
     }
     return value.toInt();
   }
@@ -1175,7 +1204,7 @@ final class SyncRepository {
   static String _requiredDate(Map<String, Object?> payload, String key) {
     final value = DateTime.tryParse(payload[key]?.toString() ?? '');
     if (value == null) {
-      throw StateError('El campo remoto $key debe contener una fecha válida.');
+      throw StateError('El campo remoto $key debe contener una fecha vÃ¡lida.');
     }
     return value.toUtc().toIso8601String();
   }
@@ -1232,14 +1261,14 @@ final class SyncRepository {
         disposition: disposition,
         message:
             json['message']?.toString() ??
-            'La sincronización remota requiere revisión.',
+            'La sincronizaciÃ³n remota requiere revisiÃ³n.',
       );
     } on Object {
       return const SyncFailure(
         category: SyncErrorCategory.unsupportedOperation,
         code: 'InvalidStoredFailure',
         disposition: SyncFailureDisposition.terminal,
-        message: 'El estado de sincronización requiere revisión.',
+        message: 'El estado de sincronizaciÃ³n requiere revisiÃ³n.',
       );
     }
   }
