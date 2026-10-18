@@ -121,6 +121,9 @@ public sealed class CashOperationsController(PosDbContext db, TenantReadService 
                                          where payment.CashSessionId == session.Id && payment.Method == "Cash"
                                              && sale.BusinessId == tenant.BusinessId && sale.Status == "Confirmed"
                                          select (long?)payment.AmountCents).SumAsync(ct) ?? 0;
+            var linkedCashExpenses = await db.Expenses
+                .Where(x => x.BusinessId == tenant.BusinessId && x.CashSessionId == session.Id && x.PaymentMethod == "Cash")
+                .Select(x => (long?)x.AmountCents).SumAsync(ct) ?? 0;
             var unlinkedCashPayments = await (from payment in db.SalePayments
                                               join sale in db.Sales on payment.SaleId equals sale.Id
                                               where payment.CashSessionId == null && payment.Method == "Cash"
@@ -135,7 +138,7 @@ public sealed class CashOperationsController(PosDbContext db, TenantReadService 
             if (unlinkedCashPayments || unlinkedCashExpenses)
                 return Conflict(new { message = "Hay actividad Cash heredada sin vínculo persistente a la sesión" });
             long expected;
-            try { expected = checked(checked(session.OpeningBalanceCents + manualDelta) + linkedCashSales); }
+            try { expected = checked(checked(checked(session.OpeningBalanceCents + manualDelta) + linkedCashSales) - linkedCashExpenses); }
             catch (OverflowException) { return Conflict(new { message = "Desbordamiento en la conciliación de caja" }); }
             var now = DateTimeOffset.UtcNow;
             session.ExpectedCashCents = expected;

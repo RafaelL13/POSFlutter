@@ -464,6 +464,9 @@ namespace Infrastructure.Migrations
                     b.Property<long>("BusinessId")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("CashSessionId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Category")
                         .HasColumnType("nvarchar(max)");
 
@@ -494,6 +497,8 @@ namespace Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CashSessionId");
 
                     b.HasIndex("BusinessId", "GlobalId")
                         .IsUnique();
@@ -1328,6 +1333,14 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Domain.Expense", b =>
+                {
+                    b.HasOne("Pos.Domain.CashSession", null)
+                        .WithMany()
+                        .HasForeignKey("CashSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Pos.Domain.InitialInventoryLine", b =>

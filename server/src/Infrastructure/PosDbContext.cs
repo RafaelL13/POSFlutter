@@ -56,7 +56,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
                 t.HasCheckConstraint("CK_CashMovement_Amount", "([Type] = 'ManualIn' AND [AmountCents] > 0) OR ([Type] = 'ManualOut' AND [AmountCents] < 0)");
             });
         });
-        b.Entity<Expense>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.ToTable(t => t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
+        b.Entity<Expense>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => x.CashSessionId); e.HasOne<CashSession>().WithMany().HasForeignKey(x => x.CashSessionId).OnDelete(DeleteBehavior.Restrict); e.ToTable(t => t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
         b.Entity<InboundOperation>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.OperationGlobalId }).IsUnique(); });
         b.Entity<SyncChange>(e => { e.HasKey(x => x.Id); e.Property(x => x.Id).ValueGeneratedOnAdd(); e.HasIndex(x => new { x.BusinessId, x.Id }); });
         b.Entity<RefreshToken>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.TokenHash).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.UserId, x.DeviceId }); });

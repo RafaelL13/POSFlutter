@@ -64,6 +64,9 @@ public sealed class CashReconciliationController(PosDbContext db) : Controller
                 && x.DeviceId == tenant.DeviceId && x.UserId == tenant.UserId
                 && x.ExpenseDate >= cash.OpenedAt && x.PaymentMethod == "Cash")
             .CountAsync(ct);
+        var linkedCashExpenses = await db.Expenses.AsNoTracking()
+            .Where(x => x.BusinessId == tenant.BusinessId && x.CashSessionId == cash.Id && x.PaymentMethod == "Cash")
+            .Select(x => x.AmountCents).ToListAsync(ct);
 
         var warnings = new List<string>();
         if (movements.Any(x => x.Type != "ManualIn" && x.Type != "ManualOut"))
@@ -74,12 +77,13 @@ public sealed class CashReconciliationController(PosDbContext db) : Controller
         if (unlinkedCashPayments > 0) warnings.Add("Hay cobros Cash heredados sin CashSessionId; el cierre queda bloqueado.");
         if (unlinkedCashExpenses > 0) warnings.Add("Hay gastos Cash sin vínculo de sesión; el cierre queda bloqueado.");
 
-        long manualDelta, cashSales, provisionalExpected;
+        long manualDelta, cashSales, cashExpenses, provisionalExpected;
         try
         {
             manualDelta = movements.Aggregate(0L, (sum, x) => checked(sum + x.AmountCents));
             cashSales = linkedPayments.Aggregate(0L, (sum, amount) => checked(sum + amount));
-            provisionalExpected = checked(checked(cash.OpeningBalanceCents + manualDelta) + cashSales);
+            cashExpenses = linkedCashExpenses.Aggregate(0L, (sum, amount) => checked(sum + amount));
+            provisionalExpected = checked(checked(checked(cash.OpeningBalanceCents + manualDelta) + cashSales) - cashExpenses);
         }
         catch (OverflowException)
         {
@@ -90,6 +94,7 @@ public sealed class CashReconciliationController(PosDbContext db) : Controller
             cash.OpeningBalanceCents,
             manualMovementCount = movements.Count, manualDeltaCents = manualDelta,
             linkedCashPaymentsCount = linkedPayments.Count, linkedCashSalesCents = cashSales,
+            linkedCashExpensesCount = linkedCashExpenses.Count, linkedCashExpensesCents = cashExpenses,
             expectedCashCents = provisionalExpected,
             unlinkedCashPayments, unlinkedCashExpenses,
             warnings, requiresReview = warnings.Count > 0, closeAuthorized = warnings.Count == 0,
