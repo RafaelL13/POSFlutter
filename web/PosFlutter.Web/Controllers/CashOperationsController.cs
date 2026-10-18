@@ -134,7 +134,7 @@ public sealed class CashOperationsController(PosDbContext db, TenantReadService 
             var unlinkedCashExpenses = await db.Expenses.AnyAsync(x =>
                 x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId &&
                 x.DeviceId == tenant.DeviceId && x.UserId == tenant.UserId &&
-                x.ExpenseDate >= session.OpenedAt && x.PaymentMethod == "Cash", ct);
+                x.ExpenseDate >= session.OpenedAt && x.PaymentMethod == "Cash" && x.CashSessionId == null, ct);
             if (unlinkedCashPayments || unlinkedCashExpenses)
                 return Conflict(new { message = "Hay actividad Cash heredada sin vínculo persistente a la sesión" });
             long expected;
