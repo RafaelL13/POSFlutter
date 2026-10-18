@@ -1131,6 +1131,9 @@ namespace Infrastructure.Migrations
                     b.Property<long>("AmountCents")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("CashSessionId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1146,6 +1149,8 @@ namespace Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CashSessionId");
 
                     b.HasIndex("GlobalId")
                         .IsUnique();
@@ -1372,6 +1377,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Pos.Domain.SalePayment", b =>
                 {
+                    b.HasOne("Pos.Domain.CashSession", null)
+                        .WithMany()
+                        .HasForeignKey("CashSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Pos.Domain.Sale", null)
                         .WithMany("Payments")
                         .HasForeignKey("SaleId")

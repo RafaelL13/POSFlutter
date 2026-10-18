@@ -128,6 +128,17 @@ public sealed class WebCheckoutService(PosDbContext db)
                 throw new ArgumentException("Cash tender supplied without cash payment.");
             if (cash > 0 && (request.ReceivedCashCents is null || request.ReceivedCashCents < cash))
                 throw new ArgumentException("Cash tender is insufficient.");
+            CashSession? cashSession = null;
+            if (cash > 0)
+            {
+                var openSessions = await db.CashSessions
+                    .Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId &&
+                        x.DeviceId == tenant.DeviceId && x.UserId == tenant.UserId && x.Status == "Open")
+                    .OrderBy(x => x.Id).Take(2).ToListAsync(ct);
+                if (openSessions.Count != 1)
+                    throw new InvalidOperationException("A cash payment requires exactly one open cash session.");
+                cashSession = openSessions[0];
+            }
             sale.ReceivedCents = cash > 0 ? request.ReceivedCashCents : null;
             sale.ChangeCents = cash > 0 ? checked(request.ReceivedCashCents!.Value - cash) : 0;
             sale.SubtotalCents = subtotal;
@@ -139,7 +150,8 @@ public sealed class WebCheckoutService(PosDbContext db)
                 sale.Payments.Add(new SalePayment
                 {
                     GlobalId = Guid.NewGuid(), Method = payment.Method,
-                    AmountCents = payment.AmountCents, CreatedAt = now
+                    AmountCents = payment.AmountCents, CreatedAt = now,
+                    CashSessionId = payment.Method == "Cash" ? cashSession!.Id : null
                 });
             db.Sales.Add(sale);
             db.SyncChanges.Add(new SyncChange

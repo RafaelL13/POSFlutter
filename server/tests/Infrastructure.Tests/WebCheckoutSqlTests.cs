@@ -32,6 +32,8 @@ public sealed class WebCheckoutSqlTests
         var sale = await test.Db.Sales.Include(x => x.Payments).Include(x => x.Lines)
             .ThenInclude(x => x.Lots).SingleAsync();
         Assert.Equal(2, sale.Payments.Count);
+        Assert.Equal(tenant.Device.Id, (await test.Db.CashSessions.SingleAsync()).DeviceId);
+        Assert.Equal((await test.Db.CashSessions.SingleAsync()).Id, sale.Payments.Single(x => x.Method == "Cash").CashSessionId);
         Assert.Equal(20, sale.ChangeCents);
         Assert.Equal(2, sale.Lines.Single().Lots.Count);
         Assert.Equal(0, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == oldLot.GlobalId)).AvailableQuantity);
@@ -49,7 +51,7 @@ public sealed class WebCheckoutSqlTests
     {
         await using var test = await SqlServerTestDatabase.CreateAsync();
         var tenant = await test.SeedTenantAsync("WEB2");
-        var (product, _, _) = await SeedLotsAsync(test, tenant);
+        var (product, oldLot, newLot) = await SeedLotsAsync(test, tenant);
         var key = Guid.NewGuid();
         var service = new WebCheckoutService(test.Db);
         var ctx = Context(tenant);
@@ -99,6 +101,41 @@ public sealed class WebCheckoutSqlTests
         Assert.Equal(0, await test.Db.SyncChanges.CountAsync());
     }
 
+    [Fact]
+    public async Task Cash_payment_requires_exactly_one_open_cash_session()
+    {
+        await using var test = await SqlServerTestDatabase.CreateAsync();
+        var tenant = await test.SeedTenantAsync("WEB5");
+        var (product, oldLot, newLot) = await SeedLotsAsync(test, tenant);
+        test.Db.RemoveRange(await test.Db.CashSessions.ToListAsync());
+        await test.Db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new WebCheckoutService(test.Db).CheckoutAsync(
+            new(Guid.NewGuid(), [new WebCheckoutLine(product.GlobalId, 1)],
+                [new WebCheckoutPayment("Cash", 100)], 100), Context(tenant), TestContext.Current.CancellationToken));
+        test.Db.ChangeTracker.Clear();
+        Assert.Empty(await test.Db.Sales.ToListAsync());
+        Assert.Empty(await test.Db.SalePayments.ToListAsync());
+        Assert.Equal(2, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == oldLot.GlobalId)).AvailableQuantity);
+        Assert.Equal(4, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == newLot.GlobalId)).AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task Non_cash_payment_does_not_require_or_link_a_cash_session()
+    {
+        await using var test = await SqlServerTestDatabase.CreateAsync();
+        var tenant = await test.SeedTenantAsync("WEB6");
+        var (product, _, _) = await SeedLotsAsync(test, tenant);
+        test.Db.RemoveRange(await test.Db.CashSessions.ToListAsync());
+        await test.Db.SaveChangesAsync();
+
+        await new WebCheckoutService(test.Db).CheckoutAsync(
+            new(Guid.NewGuid(), [new WebCheckoutLine(product.GlobalId, 1)],
+                [new WebCheckoutPayment("Card", 100)]), Context(tenant), TestContext.Current.CancellationToken);
+        test.Db.ChangeTracker.Clear();
+        Assert.Null((await test.Db.SalePayments.SingleAsync()).CashSessionId);
+    }
+
     private static SyncTenantContext Context((Business Business, Branch Branch, Device Device, UserAccount User) t) =>
         new(t.Business.Id, t.Business.GlobalId, t.Branch.Id, t.Branch.GlobalId,
             t.Device.Id, t.Device.GlobalId, t.User.Id, t.User.GlobalId, t.User.Role, t.Device.Mode);
@@ -115,7 +152,10 @@ public sealed class WebCheckoutSqlTests
         var newLot = new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id,
             BranchId = tenant.Branch.Id, ProductGlobalId = product.GlobalId,
             EntryDate = now.AddDays(-1), InitialQuantity = 4, AvailableQuantity = 4, UnitCostCents = 30, Active = true, CreatedAt = now };
-        test.Db.AddRange(product, oldLot, newLot);
+        var cash = new CashSession { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id,
+            BranchId = tenant.Branch.Id, DeviceId = tenant.Device.Id, UserId = tenant.User.Id,
+            OpenedAt = now, OpeningBalanceCents = 0, Status = "Open", UpdatedAt = now };
+        test.Db.AddRange(product, oldLot, newLot, cash);
         await test.Db.SaveChangesAsync();
         return (product, oldLot, newLot);
     }
