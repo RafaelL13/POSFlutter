@@ -37,6 +37,11 @@ public sealed class WebCheckoutSqlTests
         Assert.Equal(0, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == oldLot.GlobalId)).AvailableQuantity);
         Assert.Equal(3, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == newLot.GlobalId)).AvailableQuantity);
         Assert.Single(await test.Db.InventoryMovements.Where(x => x.ReferenceGlobalId == first.SaleGlobalId).ToListAsync());
+        var change = await test.Db.SyncChanges.SingleAsync(x => x.EntityGlobalId == first.SaleGlobalId);
+        Assert.Equal(WebSaleInventoryV1.EntityType, change.EntityType);
+        Assert.Equal(WebSaleInventoryV1.Version, change.Version);
+        Assert.Contains(oldLot.GlobalId.ToString(), change.PayloadJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(newLot.GlobalId.ToString(), change.PayloadJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -56,6 +61,7 @@ public sealed class WebCheckoutSqlTests
         test.Db.ChangeTracker.Clear();
         Assert.Equal(1, await test.Db.Sales.CountAsync());
         Assert.Equal(1, await test.Db.InventoryMovements.CountAsync());
+        Assert.Equal(1, await test.Db.SyncChanges.CountAsync());
     }
 
     [Fact]
@@ -73,6 +79,7 @@ public sealed class WebCheckoutSqlTests
         Assert.Empty(await test.Db.Sales.ToListAsync());
         Assert.Empty(await test.Db.SalePayments.ToListAsync());
         Assert.Empty(await test.Db.InventoryMovements.ToListAsync());
+        Assert.Empty(await test.Db.SyncChanges.ToListAsync());
         Assert.Equal(2, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == oldLot.GlobalId)).AvailableQuantity);
         Assert.Equal(4, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == newLot.GlobalId)).AvailableQuantity);
     }
@@ -89,6 +96,7 @@ public sealed class WebCheckoutSqlTests
         test.Db.ChangeTracker.Clear();
         Assert.Equal(0, await test.Db.Sales.CountAsync());
         Assert.Equal(0, await test.Db.InventoryMovements.CountAsync());
+        Assert.Equal(0, await test.Db.SyncChanges.CountAsync());
     }
 
     private static SyncTenantContext Context((Business Business, Branch Branch, Device Device, UserAccount User) t) =>

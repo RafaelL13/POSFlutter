@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>(); Pos.Api.WebCheckoutEndpoint.AddWebCheckout(builder.Services);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
@@ -106,6 +106,7 @@ app.MapPost("/api/device-enrollment/redeem",async(RedeemDeviceEnrollmentRequest 
 app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PushAsync(r,TenantClaims.Require(h.User),ct))).RequireAuthorization();
 app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();
 Pos.Api.WebSalePullEndpoint.Map(app);
+Pos.Api.WebCheckoutEndpoint.MapWebCheckout(app);
 
 static SyncTenantContext T(HttpContext h)=>TenantClaims.Require(h.User);
 static string R(BackendReadCapability capability) => BackendReadAuthorization.PolicyName(capability);

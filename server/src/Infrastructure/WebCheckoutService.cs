@@ -142,9 +142,16 @@ public sealed class WebCheckoutService(PosDbContext db)
                     AmountCents = payment.AmountCents, CreatedAt = now
                 });
             db.Sales.Add(sale);
-            // NOTE: SyncChange is NOT fabricated here. Existing Android pull contracts
-            // must be reused before enabling this endpoint, otherwise a partial Sale
-            // payload could corrupt downstream synchronization.
+            db.SyncChanges.Add(new SyncChange
+            {
+                BusinessId = tenant.BusinessId,
+                EntityType = WebSaleInventoryV1.EntityType,
+                EntityGlobalId = saleId,
+                Operation = "Create",
+                Version = WebSaleInventoryV1.Version,
+                PayloadJson = WebSaleInventoryV1.Serialize(sale, tenant.BusinessGlobalId, tenant.BranchGlobalId),
+                CreatedAt = now
+            });
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return new(saleId, sale.Folio, subtotal, fifoCost, false, now);
