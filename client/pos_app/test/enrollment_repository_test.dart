@@ -273,8 +273,11 @@ final class _EnrollmentApi implements JsonApiClient {
   final Map<String, Object?> response;
 
   @override
-  Future<Map<String, Object?>> get(String path, {Map<String, String>? query}) =>
-      throw UnimplementedError();
+  Future<Map<String, Object?>> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) => throw UnimplementedError();
 
   @override
   Future<Map<String, Object?>> post(

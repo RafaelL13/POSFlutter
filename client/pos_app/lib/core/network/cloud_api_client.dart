@@ -7,7 +7,11 @@ import 'package:pos_app/core/config/app_environment.dart';
 import 'package:pos_app/core/storage/secure_token_store.dart';
 
 abstract interface class JsonApiClient {
-  Future<Map<String, Object?>> get(String path, {Map<String, String>? query});
+  Future<Map<String, Object?>> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  });
   Future<Map<String, Object?>> post(
     String path,
     Map<String, Object?> body, {
@@ -113,14 +117,17 @@ final class CloudApiClient implements JsonApiClient {
   });
 
   @override
-  Future<Map<String, Object?>> get(String path, {Map<String, String>? query}) =>
-      _request(() async {
-        final response = await _get(path, query);
-        if (response.statusCode == 401 && await _refresh()) {
-          return _decode(await _get(path, query));
-        }
-        return _decode(response);
-      });
+  Future<Map<String, Object?>> get(
+    String path, {
+    Map<String, String>? query,
+    Map<String, String>? headers,
+  }) => _request(() async {
+    final response = await _get(path, query, headers);
+    if (response.statusCode == 401 && await _refresh()) {
+      return _decode(await _get(path, query, headers));
+    }
+    return _decode(response);
+  });
 
   Future<http.Response> _post(
     String path,
@@ -137,8 +144,12 @@ final class CloudApiClient implements JsonApiClient {
         .timeout(timeout);
   }
 
-  Future<http.Response> _get(String path, Map<String, String>? query) async {
-    final headers = <String, String>{};
+  Future<http.Response> _get(
+    String path,
+    Map<String, String>? query,
+    Map<String, String>? requestHeaders,
+  ) async {
+    final headers = <String, String>{...?requestHeaders};
     final token = await _tokens.accessToken();
     if (token != null) headers['authorization'] = 'Bearer $token';
     return _client.get(_uri(path, query), headers: headers).timeout(timeout);
