@@ -30,7 +30,7 @@ if (await db.Businesses.AnyAsync())
                      join existingDevice in db.Devices on existingBranch.Id equals existingDevice.BranchId
                      join existingUser in db.Users on existingBusiness.Id equals existingUser.BusinessId
                      where existingBusiness.Name == "POSFlutter MVC Lab" && existingUser.Username == "web.lab"
-                     select new { existingBusiness.GlobalId, DeviceGlobalId = existingDevice.GlobalId, existingUser.Username }).SingleAsync();
+                     select new { BusinessGlobalId = existingBusiness.GlobalId, BranchGlobalId = existingBranch.GlobalId, DeviceGlobalId = existingDevice.GlobalId, UserGlobalId = existingUser.GlobalId, existingUser.Username }).SingleAsync();
     // This utility is guarded to the disposable lab database above. Keeping the
     // laboratory account aligned with its process-only secret makes reruns repeatable.
     var labUser = await db.Users.SingleAsync(x => x.Username == lab.Username);
@@ -40,7 +40,9 @@ if (await db.Businesses.AnyAsync())
     labUser.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
     var linkedCashPayments = await db.SalePayments.CountAsync(x => x.Method == "Cash" && x.CashSessionId != null);
-    Console.WriteLine($"BUSINESS={lab.GlobalId};DEVICE={lab.DeviceGlobalId};USER={lab.Username};SALES={await db.Sales.CountAsync()};PAYMENTS={await db.SalePayments.CountAsync()};LINKED_CASH_PAYMENTS={linkedCashPayments};MOVEMENTS={await db.InventoryMovements.CountAsync()};AVAILABLE={await db.InventoryLots.SumAsync(x => x.AvailableQuantity)}");
+    var supplierId = await db.Suppliers.Where(x => x.BusinessId == db.Businesses.Where(b => b.GlobalId == lab.BusinessGlobalId).Select(b => b.Id).Single()).Select(x => (Guid?)x.GlobalId).SingleOrDefaultAsync();
+    var productId = await db.Products.Where(x => x.BusinessId == db.Businesses.Where(b => b.GlobalId == lab.BusinessGlobalId).Select(b => b.Id).Single()).Select(x => (Guid?)x.GlobalId).SingleOrDefaultAsync();
+    Console.WriteLine($"BUSINESS={lab.BusinessGlobalId};BRANCH={lab.BranchGlobalId};DEVICE={lab.DeviceGlobalId};USER_GLOBAL={lab.UserGlobalId};USER={lab.Username};SUPPLIER={supplierId};PRODUCT={productId};SALES={await db.Sales.CountAsync()};PAYMENTS={await db.SalePayments.CountAsync()};LINKED_CASH_PAYMENTS={linkedCashPayments};MOVEMENTS={await db.InventoryMovements.CountAsync()};AVAILABLE={await db.InventoryLots.SumAsync(x => x.AvailableQuantity)}");
     return;
 }
 var now = DateTimeOffset.UtcNow;
@@ -51,8 +53,9 @@ db.Branches.Add(branch); await db.SaveChangesAsync();
 var device = new Device { GlobalId = Guid.NewGuid(), BranchId = branch.Id, Name = "Web Lab", Mode = "PointOfSale", Active = true, CreatedAt = now, LastSyncAt = now };
 var hash = PasswordHashing.Create(password);
 var user = new UserAccount { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = "Operador laboratorio", Username = "web.lab", PasswordHash = hash.Hash, PasswordSalt = hash.Salt, Role = "Administrator", Active = true, CreatedAt = now, UpdatedAt = now };
+var supplier = new Supplier { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = "Proveedor laboratorio", Active = true, UpdatedAt = now };
 var product = new Product { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Code = "LAB-001", Name = "Producto de laboratorio", Presentation = "Pieza", SalePriceCents = 1250, MinimumStock = 2, Active = true, UpdatedAt = now };
-db.AddRange(device, user, product); await db.SaveChangesAsync();
+db.AddRange(device, user, supplier, product); await db.SaveChangesAsync();
 db.InventoryLots.Add(new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 10, AvailableQuantity = 10, UnitCostCents = 700, Active = true, CreatedAt = now });
 await db.SaveChangesAsync();
-Console.WriteLine($"BUSINESS={business.GlobalId};DEVICE={device.GlobalId};USER={user.Username};PRODUCT={product.GlobalId}");
+Console.WriteLine($"BUSINESS={business.GlobalId};DEVICE={device.GlobalId};USER={user.Username};SUPPLIER={supplier.GlobalId};PRODUCT={product.GlobalId}");

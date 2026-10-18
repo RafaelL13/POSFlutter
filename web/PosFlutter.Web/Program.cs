@@ -12,6 +12,7 @@ var sqlConnection=builder.Configuration.GetConnectionString("SqlServer") ?? thro
 builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(sqlConnection));
 builder.Services.AddScoped<TenantReadService>();
 builder.Services.AddScoped<WebCheckoutService>();
+builder.Services.AddScoped<PurchaseReceivingService>();
 builder.Services.AddScoped<WebTenantSession>();
 builder.Services.AddRateLimiter(options => {
  options.RejectionStatusCode=StatusCodes.Status429TooManyRequests;
