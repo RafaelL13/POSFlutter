@@ -168,7 +168,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         await EnsureTenantActiveAsync(tenant, cancellationToken);
 
         var rows = await _db.SyncChanges.AsNoTracking()
-            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after)
+            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after && x.EntityType != "WebSaleInventory")
             .OrderBy(x => x.Id)
             .Take(take + 1)
             .ToListAsync(cancellationToken);

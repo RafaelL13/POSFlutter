@@ -105,6 +105,7 @@ app.MapPost("/api/device-enrollment/recovery-invitations",async(CreateDeviceReco
 app.MapPost("/api/device-enrollment/redeem",async(RedeemDeviceEnrollmentRequest r,DeviceEnrollmentService s,CancellationToken ct)=>(await s.RedeemAsync(r,ct)) is { } x?Results.Ok(x):Results.BadRequest(new{message="Unable to enroll device."})).RequireRateLimiting("enrollment");
 app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PushAsync(r,TenantClaims.Require(h.User),ct))).RequireAuthorization();
 app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();
+Pos.Api.WebSalePullEndpoint.Map(app);
 
 static SyncTenantContext T(HttpContext h)=>TenantClaims.Require(h.User);
 static string R(BackendReadCapability capability) => BackendReadAuthorization.PolicyName(capability);
