@@ -47,9 +47,9 @@ de esta matriz.
 
 ## Paquete comercial candidato
 
-`C:\POSFlutter_Web\artifacts\POSFlutter_Web_COMMERCIAL_CANDIDATE_20261105_R3.zip`
+`C:\POSFlutter_Web\artifacts\POSFlutter_Web_COMMERCIAL_CANDIDATE_20261106_HEALTHCHECK_WAIT.zip`
 
-SHA-256: `E16BFB5640BE36FA34127523C6DC7265B9E5C701414E4C640C5D3D0A89E8F6A8`.
+SHA-256: `FD23A995E8C4AD9F1E91B3936F8EB16AB4145A0A98638F7DF81743A4D2B81F4E`.
 
 Contiene `release/`, scripts IIS, manifiesto SHA-256 e instrucciones de
 instalación. Se validó su estructura y extracción; no se instaló en IIS.
