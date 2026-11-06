@@ -62,8 +62,12 @@ try {
     # the explicitly named LAB site, never an application pool or another site.
     Stop-Website -Name $SiteName
     Start-Website -Name $SiteName
-    Start-Sleep -Milliseconds 750
-    $status = Test-Health
+    $deadline = (Get-Date).AddSeconds(20)
+    $status = 0
+    do {
+        Start-Sleep -Milliseconds 500
+        $status = Test-Health
+    } while ($status -ne 200 -and (Get-Date) -lt $deadline)
     if ($status -ne 200) { throw ('HEALTHCHECK_FAILED_HTTP_' + $status) }
     [pscustomobject]@{
         Result = 'PASS'
