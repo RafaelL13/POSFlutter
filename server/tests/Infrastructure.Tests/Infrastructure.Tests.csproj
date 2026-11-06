@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
@@ -11,5 +12,9 @@
     <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Application\Application.csproj" />
     <ProjectReference Include="..\..\src\Domain\Domain.csproj" />
+    <ProjectReference Include="..\..\..\web\PosFlutter.Web\PosFlutter.Web.csproj" />
+    <Compile Include="..\..\..\web\PosFlutter.Web\Services\ReportExportWriter.cs" Link="ReportExportWriter.cs" />
+    <None Include="..\..\src\Api\Program.cs" Link="src\Api\Program.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Api\CentralInventoryAuthentication.cs" Link="src\Api\CentralInventoryAuthentication.cs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

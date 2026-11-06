@@ -38,7 +38,7 @@ public sealed class DataController(TenantReadService reads) : Controller
     [HttpGet("expenses")]
     public Task<IActionResult> Expenses(CancellationToken ct) => Read(async (t,c) => await reads.ExpensesAsync(t,c), ct);
     [HttpGet("devices")]
-    public Task<IActionResult> Devices(CancellationToken ct) => Read(async (t,c) => await reads.DevicesAsync(t,c), ct);
+    public Task<IActionResult> Devices(Guid? branch,Guid? device,CancellationToken ct) => Read(async (t,c) => await reads.DevicesAsync(t,c,branch,device), ct);
     [HttpGet("branches")]
     public Task<IActionResult> Branches(CancellationToken ct) => Read(async (t,c) => await reads.BranchesAsync(t,c), ct);
     [HttpGet("users")]

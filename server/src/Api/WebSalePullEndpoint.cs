@@ -44,7 +44,7 @@ public static class WebSalePullEndpoint
             var take = Math.Clamp(limit.GetValueOrDefault(100), 1, 200);
 
             var rows = await db.SyncChanges.AsNoTracking()
-                .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after)
+                .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after && x.EntityType != "Purchase")
                 .OrderBy(x => x.Id)
                 .Take(take + 1)
                 .ToListAsync(ct);

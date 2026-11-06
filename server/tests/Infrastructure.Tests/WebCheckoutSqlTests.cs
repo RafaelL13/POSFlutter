@@ -67,6 +67,33 @@ public sealed class WebCheckoutSqlTests
     }
 
     [Fact]
+    public async Task Concurrent_same_key_creates_one_sale_payment_fifo_and_cash_movement()
+    {
+        await using var test = await SqlServerTestDatabase.CreateAsync();
+        var tenant = await test.SeedTenantAsync("WEB_CONCURRENT");
+        var (product, oldLot, newLot) = await SeedLotsAsync(test, tenant);
+        var request = new WebCheckoutRequest(Guid.NewGuid(),
+            [new WebCheckoutLine(product.GlobalId, 3)],
+            [new WebCheckoutPayment("Cash", 300)], 300);
+        await using var firstDb = test.CreateDbContext();
+        await using var secondDb = test.CreateDbContext();
+
+        var results = await Task.WhenAll(
+            new WebCheckoutService(firstDb).CheckoutAsync(request, Context(tenant), TestContext.Current.CancellationToken),
+            new WebCheckoutService(secondDb).CheckoutAsync(request, Context(tenant), TestContext.Current.CancellationToken));
+
+        Assert.Equal(results[0].SaleGlobalId, results[1].SaleGlobalId);
+        Assert.Contains(results, result => result.AlreadyProcessed);
+        test.Db.ChangeTracker.Clear();
+        Assert.Single(await test.Db.Sales.ToListAsync());
+        Assert.Single(await test.Db.SalePayments.ToListAsync());
+        Assert.Single(await test.Db.InventoryMovements.ToListAsync());
+        Assert.Single(await test.Db.SyncChanges.ToListAsync());
+        Assert.Equal(0, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == oldLot.GlobalId)).AvailableQuantity);
+        Assert.Equal(3, (await test.Db.InventoryLots.SingleAsync(x => x.GlobalId == newLot.GlobalId)).AvailableQuantity);
+    }
+
+    [Fact]
     public async Task Invalid_payment_rolls_back_lots_sale_and_movements()
     {
         await using var test = await SqlServerTestDatabase.CreateAsync();

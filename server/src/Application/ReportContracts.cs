@@ -2,6 +2,9 @@ namespace Pos.Application;
 
 public sealed record ReportPeriod(DateTimeOffset From, DateTimeOffset ToExclusive);
 public sealed record ReportPage<T>(int Page,int PageSize,long TotalCount,IReadOnlyList<T> Items);
+// All values are optional server-side constraints.  The web layer never composes SQL.
+public sealed record SalesReportFilter(Guid? BranchGlobalId, Guid? UserGlobalId, Guid? ProductGlobalId,
+    string? PaymentMethod, string? Status, string SortBy = "date", bool Descending = true);
 
 public sealed record RemoteSummaryReport(
     DateTimeOffset From,

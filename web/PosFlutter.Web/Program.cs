@@ -11,7 +11,9 @@ builder.Services.AddSession(o => { o.Cookie.Name = "__Host-PosWeb"; o.Cookie.Htt
 var sqlConnection=builder.Configuration.GetConnectionString("SqlServer") ?? throw new InvalidOperationException("ConnectionStrings:SqlServer is required.");
 builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(sqlConnection));
 builder.Services.AddScoped<TenantReadService>();
+builder.Services.AddScoped<RemoteReportService>();
 builder.Services.AddScoped<WebCheckoutService>();
+builder.Services.AddScoped<WebSaleCancellationService>();
 builder.Services.AddScoped<PurchaseReceivingService>();
 builder.Services.AddScoped<WebTenantSession>();
 builder.Services.AddRateLimiter(options => {
@@ -29,6 +31,8 @@ if(!app.Environment.IsDevelopment()) { app.UseExceptionHandler("/Home/Error"); a
 app.UseHttpsRedirection(); app.UseStaticFiles(); app.UseRouting();
 app.Use(async (ctx,next)=> { ctx.Response.Headers["X-Content-Type-Options"]="nosniff";ctx.Response.Headers["Referrer-Policy"]="no-referrer";ctx.Response.Headers["X-Frame-Options"]="DENY";ctx.Response.Headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";ctx.Response.Headers["Cache-Control"]="no-store";await next(); });
 app.UseSession(); app.UseRateLimiter();
+app.MapGet("/health",async (PosDbContext db,CancellationToken ct) =>
+    await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status="healthy",sqlServer=true }) : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 app.MapControllerRoute(name:"default",pattern:"{controller=Home}/{action=Index}/{id?}");
 app.Run();
 public partial class Program { }

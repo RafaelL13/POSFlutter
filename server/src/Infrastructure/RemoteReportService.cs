@@ -156,11 +156,42 @@ public sealed class RemoteReportService(PosDbContext db)
 
     public async Task<ReportPage<SaleReportDetailRow>> SaleDetailsAsync(SyncTenantContext tenant,ReportPeriod period,int page,int pageSize,CancellationToken ct)
     {
+        return await SaleDetailsAsync(tenant,period,page,pageSize,new SalesReportFilter(null,null,null,null,null),ct);
+    }
+
+    public async Task<ReportPage<SaleReportDetailRow>> SaleDetailsAsync(SyncTenantContext tenant,ReportPeriod period,int page,int pageSize,SalesReportFilter filter,CancellationToken ct)
+    {
         await EnsureAsync(tenant,ct);
         page = Math.Max(1,page); pageSize = Math.Clamp(pageSize,1,200);
         var query = SalesIn(tenant,period);
+        if (filter.BranchGlobalId is { } branch)
+            query = query.Where(s => _db.Branches.Any(b => b.Id == s.BranchId && b.BusinessId == tenant.BusinessId && b.GlobalId == branch && b.Active));
+        if (filter.UserGlobalId is { } user)
+            query = query.Where(s => _db.Users.Any(u => u.Id == s.UserId && u.BusinessId == tenant.BusinessId && u.GlobalId == user && u.Active));
+        if (filter.ProductGlobalId is { } product)
+            query = query.Where(s => _db.SaleLines.Any(l => l.SaleId == s.Id && l.ProductGlobalId == product));
+        if (!string.IsNullOrWhiteSpace(filter.PaymentMethod))
+        {
+            var method = filter.PaymentMethod.Trim();
+            if (method.Length > 32) throw new ArgumentException("Invalid payment method.");
+            query = query.Where(s => s.PaymentMethod == method);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Status))
+        {
+            var status = filter.Status.Trim();
+            if (status is not (Confirmed or Cancelled)) throw new ArgumentException("Invalid sale status.");
+            query = query.Where(s => s.Status == status);
+        }
         var total = await query.LongCountAsync(ct);
-        var items = await query.OrderByDescending(x => x.SaleDateTime).ThenByDescending(x => x.Id)
+        var ordered = filter.SortBy.ToLowerInvariant() switch
+        {
+            "folio" => filter.Descending ? query.OrderByDescending(x => x.Folio) : query.OrderBy(x => x.Folio),
+            "total" => filter.Descending ? query.OrderByDescending(x => x.TotalCents) : query.OrderBy(x => x.TotalCents),
+            "status" => filter.Descending ? query.OrderByDescending(x => x.Status) : query.OrderBy(x => x.Status),
+            "date" => filter.Descending ? query.OrderByDescending(x => x.SaleDateTime) : query.OrderBy(x => x.SaleDateTime),
+            _ => throw new ArgumentException("Invalid sale sort."),
+        };
+        var items = await ordered.ThenByDescending(x => x.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(s => new SaleReportDetailRow(
                 s.GlobalId,s.Folio,s.SaleDateTime,

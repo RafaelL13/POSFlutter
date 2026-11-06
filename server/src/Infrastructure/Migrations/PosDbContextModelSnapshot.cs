@@ -22,6 +22,71 @@ namespace Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Pos.Domain.AdminProductAudit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ActorDeviceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ActorUserGlobalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("ActorUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BeforeJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("BranchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("BusinessId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("NewServerVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<long?>("PreviousServerVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ProductGlobalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("SyncChangeId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessId", "SyncChangeId")
+                        .IsUnique();
+
+                    b.HasIndex("BusinessId", "ProductGlobalId", "CreatedAt");
+
+                    b.ToTable("AdminProductAudits", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AdminProductAudit_Operation", "[Operation] IN ('Create','Update')");
+
+                            t.HasCheckConstraint("CK_AdminProductAudit_Versions", "([Operation] = 'Create' AND [PreviousServerVersion] IS NULL AND [NewServerVersion] = 1) OR ([Operation] = 'Update' AND [PreviousServerVersion] >= 1 AND [NewServerVersion] = [PreviousServerVersion] + 1)");
+                        });
+                });
+
             modelBuilder.Entity("Pos.Domain.Branch", b =>
                 {
                     b.Property<long>("Id")
@@ -756,6 +821,10 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("BusinessId", "GlobalId")
                         .IsUnique();
+
+                    b.HasIndex("BusinessId", "BranchId", "ReferenceGlobalId")
+                        .IsUnique()
+                        .HasFilter("[Type] IN ('AdjustmentIn','AdjustmentOut')");
 
                     b.HasIndex("BusinessId", "BranchId", "ProductGlobalId", "MovementDate");
 

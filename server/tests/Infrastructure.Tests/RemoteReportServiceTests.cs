@@ -28,6 +28,21 @@ public sealed class RemoteReportServiceTests
     }
 
     [Fact]
+    public async Task Sale_details_filters_are_bounded_tenant_scoped_and_preserve_fifo_history()
+    {
+        await using var test=await SqlServerTestDatabase.CreateAsync(); var now=DateTimeOffset.UtcNow;
+        var a=await test.SeedTenantAsync("P039A"); var b=await test.SeedTenantAsync("P039B");
+        var productA=await AddProductAsync(test,a.Business,"A","Alpha"); var productB=await AddProductAsync(test,b.Business,"B","Beta");
+        await AddSaleAsync(test,a,productA,now,totalCents:1500,allocationCostCents:600,paymentMethod:"Card");
+        await AddSaleAsync(test,a,productA,now.AddMinutes(-1),totalCents:700,allocationCostCents:100,status:"Cancelled",paymentMethod:"Cash");
+        await AddSaleAsync(test,b,productB,now,totalCents:9000,allocationCostCents:1,paymentMethod:"Card");
+        var filter=new SalesReportFilter(a.Branch.GlobalId,a.User.GlobalId,productA.GlobalId,"Card","Confirmed","total",true);
+        var page=await new RemoteReportService(test.Db).SaleDetailsAsync(Context(a),Period(now),1,10,filter,CancellationToken.None);
+        var row=Assert.Single(page.Items); Assert.Equal(1500,row.TotalCents); Assert.Equal(600,row.FifoCostCents); Assert.Equal(900,row.GrossProfitCents);
+        await Assert.ThrowsAsync<ArgumentException>(async ()=>await new RemoteReportService(test.Db).SaleDetailsAsync(Context(a),Period(now),1,10,filter with { Status="Injected" },CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Summary_is_tenant_scoped()
     {
         await using var test = await SqlServerTestDatabase.CreateAsync(); var now = DateTimeOffset.UtcNow;

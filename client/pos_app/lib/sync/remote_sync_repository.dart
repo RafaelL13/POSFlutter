@@ -28,7 +28,7 @@ final class RemoteSyncRepository {
       SyncPullBatch.fromJson(
         await _api.get(
           '/api/sync/pull-v2',
-          query: {'cursor': '$cursor', 'limit': '$limit'},
+          query: {'cursor': '$cursor', 'limit': '$limit', 'purchaseV1': 'true'},
           headers: {webSaleCapabilityHeader: webSaleCapability},
         ),
       );

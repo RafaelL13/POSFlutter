@@ -33,6 +33,25 @@ public sealed class CashMovement
 public sealed class Expense { public long Id { get; set; } public Guid GlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public long DeviceId { get; set; } public long UserId { get; set; } public long? CashSessionId { get; set; } public DateTimeOffset ExpenseDate { get; set; } public string Concept { get; set; } = ""; public string? Category { get; set; } public long AmountCents { get; set; } public string PaymentMethod { get; set; } = "Cash"; public string? Notes { get; set; } public DateTimeOffset CreatedAt { get; set; } }
 public sealed class CentralInventoryTransferReceipt { public long Id { get; set; } public Guid TransferGlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public DateTimeOffset ReceivedAt { get; set; } }
 public sealed class InboundOperation { public long Id { get; set; } public long BusinessId { get; set; } public Guid OperationGlobalId { get; set; } public string EntityType { get; set; } = ""; public Guid EntityGlobalId { get; set; } public string Operation { get; set; } = ""; public int PayloadVersion { get; set; } public string PayloadJson { get; set; } = "{}"; public DateTimeOffset ReceivedAt { get; set; } }
+
+// Append-only administrative product audit. Retained independently of synchronization cursors.
+public sealed class AdminProductAudit
+{
+    public long Id { get; set; }
+    public long BusinessId { get; set; }
+    public long BranchId { get; set; }
+    public long ActorUserId { get; set; }
+    public Guid ActorUserGlobalId { get; set; }
+    public long ActorDeviceId { get; set; }
+    public Guid ProductGlobalId { get; set; }
+    public string Operation { get; set; } = "";
+    public long? PreviousServerVersion { get; set; }
+    public long NewServerVersion { get; set; }
+    public long SyncChangeId { get; set; }
+    public string? BeforeJson { get; set; }
+    public string AfterJson { get; set; } = "{}";
+    public DateTimeOffset CreatedAt { get; set; }
+}
 public sealed class SyncChange { public long Id { get; set; } public long BusinessId { get; set; } public string EntityType { get; set; } = ""; public Guid EntityGlobalId { get; set; } public string Operation { get; set; } = ""; public long Version { get; set; } public string PayloadJson { get; set; } = "{}"; public DateTimeOffset CreatedAt { get; set; } }
 public sealed class RefreshToken { public long Id { get; set; } public long BusinessId { get; set; } public long UserId { get; set; } public long DeviceId { get; set; } public string TokenHash { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset ExpiresAt { get; set; } public DateTimeOffset? RevokedAt { get; set; } }
 public sealed class DeviceEnrollmentToken { public long Id { get; set; } public Guid GlobalId { get; set; } = Guid.NewGuid(); public string TokenHash { get; set; } = ""; public long BusinessId { get; set; } public long BranchId { get; set; } public long CreatedByUserId { get; set; } public string RequestedMode { get; set; } = "AdminReadOnly"; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset ExpiresAt { get; set; } public DateTimeOffset? UsedAt { get; set; } public long? DeviceId { get; set; } public DateTimeOffset? RevokedAt { get; set; } }

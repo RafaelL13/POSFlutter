@@ -8,13 +8,14 @@ import 'package:pos_app/core/utils/id_generator.dart';
 import 'package:pos_app/database/app_database.dart';
 import 'package:pos_app/sync/sync_operation.dart';
 import 'package:pos_app/sync/sync_pull.dart';
+import 'package:pos_app/sync/purchase_inventory_applier.dart';
 import 'package:pos_app/sync/web_sale_inventory_applier.dart';
 import 'package:pos_app/sync/sync_error.dart';
 import 'package:pos_app/sync/sync_health.dart';
 
 final class SyncRepository {
-  SyncRepository({required this._database, IdGenerator? idGenerator})
-    : _ids = idGenerator ?? const UuidV7Generator();
+  SyncRepository({required AppDatabase database, IdGenerator? idGenerator})
+    : _database = database, _ids = idGenerator ?? const UuidV7Generator();
 
   final AppDatabase _database;
   final IdGenerator _ids;
@@ -530,7 +531,10 @@ final class SyncRepository {
       );
       return;
     }
-
+    if (change.entityType == 'Purchase') {
+      await PurchaseInventoryApplier.apply(tx, change, context);
+      return;
+    }
     _validateRemoteBusiness(change, context.businessGlobalId);
     if (change.entityType == 'CentralTransferIn') {
       await _applyCentralTransferIn(tx, change, context);

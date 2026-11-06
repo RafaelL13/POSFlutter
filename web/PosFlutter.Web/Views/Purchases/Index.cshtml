@@ -1,0 +1,26 @@
+@model List<Pos.Domain.Purchase>
+@{
+    ViewData["Title"] = "Compras";
+}
+<main class="purchase-page flutter-list-page">
+<header class="module-tablet-header"><div><p class="eyebrow">Operación central</p><h1>Compras</h1><p>Registra mercancía recibida con proveedor, costo y trazabilidad FIFO.</p></div><a class="btn btn-primary primary" href="/purchases/create">＋ Nueva compra</a></header>
+<section class="purchase-guidance" aria-label="Información de compras"><strong>Compras es la vía principal para agregar existencias</strong><p>Cada recepción conserva proveedor, costo y trazabilidad FIFO.</p></section>
+@if (Model.Count == 0) {
+    <section class="tablet-empty-state"><strong>Compras</strong><p>No se encontraron compras para esta sucursal.</p><a href="/purchases/create">Registrar compra</a></section>
+} else {
+    <section class="purchase-record-grid" aria-label="Compras recibidas">
+      @foreach (var p in Model) {
+        <article class="purchase-record-card">
+          <div class="purchase-record-top"><strong>Compra @p.PurchaseDate.ToLocalTime().ToString("dd/MM/yyyy")</strong><span class="purchase-record-status">@p.Status</span></div>
+          <dl>
+            <div><dt>Fecha</dt><dd>@p.PurchaseDate.ToLocalTime().ToString("g")</dd></div>
+            <div><dt>Proveedor</dt><dd>@p.SupplierGlobalId</dd></div>
+            <div><dt>Importe</dt><dd class="purchase-record-total">@((p.TotalCents/100m).ToString("C"))</dd></div>
+            <div><dt>Folio interno</dt><dd>@p.GlobalId</dd></div>
+          </dl>
+          <a class="purchase-record-detail" href="/purchases/details/@p.GlobalId" aria-label="Ver detalle de la compra @p.GlobalId">Ver detalle</a>
+        </article>
+      }
+    </section>
+}
+</main>

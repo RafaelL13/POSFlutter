@@ -11,7 +11,7 @@ void main() {
       final batch = await RemoteSyncRepository(api).pull(42, limit: 25);
 
       expect(api.path, '/api/sync/pull-v2');
-      expect(api.query, {'cursor': '42', 'limit': '25'});
+      expect(api.query, {'cursor': '42', 'limit': '25', 'purchaseV1': 'true'});
       expect(api.headers, {
         RemoteSyncRepository.webSaleCapabilityHeader:
             RemoteSyncRepository.webSaleCapability,

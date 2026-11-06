@@ -119,7 +119,9 @@ public sealed class CashOperationsController(PosDbContext db, TenantReadService 
             var linkedCashSales = await (from payment in db.SalePayments
                                          join sale in db.Sales on payment.SaleId equals sale.Id
                                          where payment.CashSessionId == session.Id && payment.Method == "Cash"
-                                             && sale.BusinessId == tenant.BusinessId && sale.Status == "Confirmed"
+                                             // A cash cancellation records an offsetting ManualOut. Include the original
+                                             // payment here so it is offset exactly once rather than subtracting it twice.
+                                             && sale.BusinessId == tenant.BusinessId && (sale.Status == "Confirmed" || sale.Status == "Cancelled")
                                          select (long?)payment.AmountCents).SumAsync(ct) ?? 0;
             var linkedCashExpenses = await db.Expenses
                 .Where(x => x.BusinessId == tenant.BusinessId && x.CashSessionId == session.Id && x.PaymentMethod == "Cash")

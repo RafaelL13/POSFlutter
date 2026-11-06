@@ -8,8 +8,12 @@ var connection = Environment.GetEnvironmentVariable("ConnectionStrings__SqlServe
 var password = Environment.GetEnvironmentVariable("POSFLUTTER_LAB_PASSWORD")
     ?? throw new InvalidOperationException("POSFLUTTER_LAB_PASSWORD is required.");
 var builder = new SqlConnectionStringBuilder(connection);
-if (string.IsNullOrWhiteSpace(builder.InitialCatalog) || !builder.InitialCatalog.StartsWith("POSFlutter_MvcLab_", StringComparison.Ordinal))
-    throw new InvalidOperationException("Use an explicitly named POSFlutter_MvcLab_ database only.");
+if (string.IsNullOrWhiteSpace(builder.InitialCatalog) ||
+    !(builder.InitialCatalog.StartsWith("POSFlutter_MvcLab_", StringComparison.Ordinal) ||
+      builder.InitialCatalog.StartsWith("POSWEB_AV96_CHECKOUT_", StringComparison.Ordinal) ||
+      builder.InitialCatalog.StartsWith("POSWEB_AV97_PAYMENTS_", StringComparison.Ordinal) ||
+      builder.InitialCatalog.StartsWith("POSWEB_AV98_INVENTORY_", StringComparison.Ordinal)))
+    throw new InvalidOperationException("Use an explicitly named POSFlutter_MvcLab_, POSWEB_AV96_CHECKOUT_, POSWEB_AV97_PAYMENTS_, or POSWEB_AV98_INVENTORY_ database only.");
 var database = builder.InitialCatalog;
 builder.InitialCatalog = "master";
 await using (var master = new SqlConnection(builder.ConnectionString))
@@ -39,10 +43,68 @@ if (await db.Businesses.AnyAsync())
     labUser.PasswordSalt = labHash.Salt;
     labUser.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
+    if (string.Equals(Environment.GetEnvironmentVariable("POSFLUTTER_LAB_REVOKE_DEVICE"), "1", StringComparison.Ordinal))
+    {
+        var revokedDevice = await db.Devices.SingleAsync(x => x.GlobalId == lab.DeviceGlobalId);
+        revokedDevice.Active = false;
+        await db.SaveChangesAsync();
+    }
+    // Security-only fixtures remain confined to POSFlutter_MvcLab_* databases.
+    // They permit HTTP authorization tests without using production identities.
+    var labBusinessId = await db.Businesses.Where(x => x.GlobalId == lab.BusinessGlobalId).Select(x => x.Id).SingleAsync();
+    var seller = await db.Users.SingleOrDefaultAsync(x => x.BusinessId == labBusinessId && x.Username == "seller.lab");
+    if (seller is null)
+    {
+        var sellerHash = PasswordHashing.Create(password);
+        seller = new UserAccount { GlobalId = Guid.NewGuid(), BusinessId = labBusinessId, Name = "Vendedor laboratorio", Username = "seller.lab", PasswordHash = sellerHash.Hash, PasswordSalt = sellerHash.Salt, Role = "Seller", Active = true, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow };
+        db.Users.Add(seller); await db.SaveChangesAsync();
+    }
+    else
+    {
+        var sellerHash = PasswordHashing.Create(password);
+        seller.PasswordHash = sellerHash.Hash; seller.PasswordSalt = sellerHash.Salt; seller.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+    }
+    var foreignBusiness = await db.Businesses.SingleOrDefaultAsync(x => x.Name == "POSFlutter MVC Foreign Lab");
+    if (foreignBusiness is null)
+    {
+        var nowSecurity = DateTimeOffset.UtcNow;
+        foreignBusiness = new Business { GlobalId = Guid.NewGuid(), Name = "POSFlutter MVC Foreign Lab", Active = true, CreatedAt = nowSecurity, UpdatedAt = nowSecurity };
+        db.Businesses.Add(foreignBusiness); await db.SaveChangesAsync();
+        var foreignBranch = new Branch { GlobalId = Guid.NewGuid(), BusinessId = foreignBusiness.Id, Name = "Sucursal ajena", Active = true, CreatedAt = nowSecurity, UpdatedAt = nowSecurity };
+        db.Branches.Add(foreignBranch); await db.SaveChangesAsync();
+        var foreignDevice = new Device { GlobalId = Guid.NewGuid(), BranchId = foreignBranch.Id, Name = "Dispositivo ajeno", Mode = "PointOfSale", Active = true, CreatedAt = nowSecurity, LastSyncAt = nowSecurity };
+        var foreignHash = PasswordHashing.Create(password);
+        var foreignUser = new UserAccount { GlobalId = Guid.NewGuid(), BusinessId = foreignBusiness.Id, Name = "Operador ajeno", Username = "foreign.lab", PasswordHash = foreignHash.Hash, PasswordSalt = foreignHash.Salt, Role = "Administrator", Active = true, CreatedAt = nowSecurity, UpdatedAt = nowSecurity };
+        var foreignProduct = new Product { GlobalId = Guid.NewGuid(), BusinessId = foreignBusiness.Id, Code = "FOREIGN-001", Name = "Producto ajeno", Presentation = "Pieza", SalePriceCents = 1250, MinimumStock = 1, Active = true, UpdatedAt = nowSecurity };
+        db.AddRange(foreignDevice, foreignUser, foreignProduct);
+        await db.SaveChangesAsync();
+        db.InventoryLots.Add(new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = foreignBusiness.Id, BranchId = foreignBranch.Id, ProductGlobalId = foreignProduct.GlobalId, EntryDate = nowSecurity, InitialQuantity = 10, AvailableQuantity = 10, UnitCostCents = 700, Active = true, CreatedAt = nowSecurity });
+        await db.SaveChangesAsync();
+    }
+    var foreignSecurity = await (from foreignB in db.Businesses
+                                 join foreignBr in db.Branches on foreignB.Id equals foreignBr.BusinessId
+                                 join foreignD in db.Devices on foreignBr.Id equals foreignD.BranchId
+                                 join foreignU in db.Users on foreignB.Id equals foreignU.BusinessId
+                                 join foreignP in db.Products on foreignB.Id equals foreignP.BusinessId
+                                 where foreignB.Id == foreignBusiness.Id && foreignU.Username == "foreign.lab"
+                                 select new { foreignB.GlobalId, BranchGlobalId = foreignBr.GlobalId, DeviceGlobalId = foreignD.GlobalId, UserGlobalId = foreignU.GlobalId, ProductGlobalId = foreignP.GlobalId }).SingleAsync();
+    var foreignLabUser = await db.Users.SingleAsync(x => x.GlobalId == foreignSecurity.UserGlobalId);
+    var foreignLabHash = PasswordHashing.Create(password);
+    foreignLabUser.PasswordHash = foreignLabHash.Hash; foreignLabUser.PasswordSalt = foreignLabHash.Salt; foreignLabUser.UpdatedAt = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
     var linkedCashPayments = await db.SalePayments.CountAsync(x => x.Method == "Cash" && x.CashSessionId != null);
-    var supplierId = await db.Suppliers.Where(x => x.BusinessId == db.Businesses.Where(b => b.GlobalId == lab.BusinessGlobalId).Select(b => b.Id).Single()).Select(x => (Guid?)x.GlobalId).SingleOrDefaultAsync();
-    var productId = await db.Products.Where(x => x.BusinessId == db.Businesses.Where(b => b.GlobalId == lab.BusinessGlobalId).Select(b => b.Id).Single()).Select(x => (Guid?)x.GlobalId).SingleOrDefaultAsync();
-    Console.WriteLine($"BUSINESS={lab.BusinessGlobalId};BRANCH={lab.BranchGlobalId};DEVICE={lab.DeviceGlobalId};USER_GLOBAL={lab.UserGlobalId};USER={lab.Username};SUPPLIER={supplierId};PRODUCT={productId};SALES={await db.Sales.CountAsync()};PAYMENTS={await db.SalePayments.CountAsync()};LINKED_CASH_PAYMENTS={linkedCashPayments};MOVEMENTS={await db.InventoryMovements.CountAsync()};AVAILABLE={await db.InventoryLots.SumAsync(x => x.AvailableQuantity)}");
+    var supplierId = await db.Suppliers.Where(x => x.BusinessId == labBusinessId)
+        .OrderBy(x => x.Name).Select(x => (Guid?)x.GlobalId).FirstOrDefaultAsync();
+    // Purchases and security fixtures can legitimately add products to a reused LAB.
+    // Return the canonical seeded product when present, otherwise a deterministic
+    // fallback, rather than treating a healthy multi-product catalog as corruption.
+    var productId = await db.Products.Where(x => x.BusinessId == labBusinessId)
+        .OrderByDescending(x => x.Code == "LAB-001").ThenBy(x => x.Code)
+        .Select(x => (Guid?)x.GlobalId).FirstOrDefaultAsync();
+    var purchaseMovements = await db.InventoryMovements.CountAsync(x => x.Type == "Purchase");
+    var purchaseChanges = await db.SyncChanges.CountAsync(x => x.EntityType == "Purchase");
+    Console.WriteLine($"BUSINESS={lab.BusinessGlobalId};BRANCH={lab.BranchGlobalId};DEVICE={lab.DeviceGlobalId};USER_GLOBAL={lab.UserGlobalId};USER={lab.Username};SELLER={seller.GlobalId};SELLER_USER={seller.Username};SUPPLIER={supplierId};PRODUCT={productId};FOREIGN_BUSINESS={foreignSecurity.GlobalId};FOREIGN_BRANCH={foreignSecurity.BranchGlobalId};FOREIGN_DEVICE={foreignSecurity.DeviceGlobalId};FOREIGN_USER={foreignSecurity.UserGlobalId};FOREIGN_USERNAME=foreign.lab;FOREIGN_PRODUCT={foreignSecurity.ProductGlobalId};PURCHASES={await db.Purchases.CountAsync()};PURCHASE_LINES={await db.PurchaseLines.CountAsync()};LOTS={await db.InventoryLots.CountAsync()};PURCHASE_MOVEMENTS={purchaseMovements};PURCHASE_CHANGES={purchaseChanges};SALES={await db.Sales.CountAsync()};PAYMENTS={await db.SalePayments.CountAsync()};LINKED_CASH_PAYMENTS={linkedCashPayments};MOVEMENTS={await db.InventoryMovements.CountAsync()};AVAILABLE={await db.InventoryLots.SumAsync(x => x.AvailableQuantity)}");
     return;
 }
 var now = DateTimeOffset.UtcNow;

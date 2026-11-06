@@ -157,18 +157,19 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         return new SyncPushResponse(results, DateTimeOffset.UtcNow);
     }
 
+    public Task<SyncPullResponse> PullAsync(long after, int take, SyncTenantContext tenant, CancellationToken cancellationToken)
+        => PullAsync(after, take, tenant, cancellationToken, false);
+
     public async Task<SyncPullResponse> PullAsync(
-        long after,
-        int take,
-        SyncTenantContext tenant,
-        CancellationToken cancellationToken)
+        long after, int take, SyncTenantContext tenant,
+        CancellationToken cancellationToken, bool includePurchases)
     {
         if (after < 0) throw new ArgumentOutOfRangeException(nameof(after));
         take = Math.Clamp(take <= 0 ? 100 : take, 1, 200);
         await EnsureTenantActiveAsync(tenant, cancellationToken);
 
         var rows = await _db.SyncChanges.AsNoTracking()
-            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after && x.EntityType != "WebSaleInventory")
+            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after && x.EntityType != "WebSaleInventory" && (includePurchases || x.EntityType != "Purchase"))
             .OrderBy(x => x.Id)
             .Take(take + 1)
             .ToListAsync(cancellationToken);
@@ -718,6 +719,26 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             cancellationToken)) return;
 
         var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
+        long? cashSessionId = null;
+        if (payload.CashSessionGlobalId is { } cashSessionGlobalId)
+        {
+            if (payload.PaymentMethod != "Cash")
+                throw new ArgumentException("Only cash expenses can reference a cash session.");
+
+            var session = await _db.CashSessions.AsNoTracking().SingleOrDefaultAsync(
+                x => x.BusinessId == tenant.BusinessId &&
+                     x.BranchId == tenant.BranchId &&
+                     x.DeviceId == tenant.DeviceId &&
+                     x.GlobalId == cashSessionGlobalId,
+                cancellationToken);
+            if (session is null)
+                throw new InvalidOperationException($"Cash session {cashSessionGlobalId} has not been synchronized yet.");
+            if (payload.Date < session.OpenedAt ||
+                (session.ClosedAt is { } closedAt && payload.Date > closedAt))
+                throw new ArgumentException("Expense date is outside the cash session interval.");
+            cashSessionId = session.Id;
+        }
+
         _db.Expenses.Add(new Expense
         {
             GlobalId = payload.GlobalId,
@@ -725,6 +746,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             BranchId = tenant.BranchId,
             DeviceId = tenant.DeviceId,
             UserId = userId,
+            CashSessionId = cashSessionId,
             ExpenseDate = payload.Date,
             Concept = payload.Concept.Trim(),
             Category = Clean(payload.Category),

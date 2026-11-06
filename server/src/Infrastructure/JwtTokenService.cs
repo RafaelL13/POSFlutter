@@ -27,6 +27,12 @@ public sealed class TokenService(PosDbContext db,IOptions<JwtOptions> options) :
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request,CancellationToken ct)
     {
+        if (request is null || request.BusinessGlobalId == Guid.Empty || request.DeviceGlobalId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            return null;
+        }
+
         var row=await (from b in _db.Businesses.AsNoTracking()
                        join br in _db.Branches.AsNoTracking() on b.Id equals br.BusinessId
                        join d in _db.Devices.AsNoTracking() on br.Id equals d.BranchId
