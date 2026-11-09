@@ -1,0 +1,15 @@
+<Project>
+  <!-- Opt-in only: prevents a lab publish from sharing MSBuild intermediates with
+       project references or DLLs currently loaded by an existing local host. -->
+  <PropertyGroup Condition="'$(P042IsolatedBuild)' == 'true'">
+    <!-- Callers can select a new root for every lab build, keeping generated
+         files out of the source tree and away from locked application outputs. -->
+    <PosFlutterIsolatedBuildRoot Condition="'$(PosFlutterIsolatedBuildRoot)' == ''">C:\POSFlutter_Web\artifacts\p042-host-20261020\build</PosFlutterIsolatedBuildRoot>
+    <BaseIntermediateOutputPath>$(PosFlutterIsolatedBuildRoot)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(PosFlutterIsolatedBuildRoot)\bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <!-- The SDK normally excludes the default obj folder. Once its base is
+         redirected, retain that exclusion so prior generated attributes never
+         become source files. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**;$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>
