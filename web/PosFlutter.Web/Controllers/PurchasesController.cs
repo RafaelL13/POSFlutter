@@ -21,6 +21,10 @@ public sealed class PurchasesController(PosDbContext db, PurchaseReceivingServic
         var purchases = await db.Purchases.AsNoTracking()
             .Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId)
             .OrderByDescending(x => x.PurchaseDate).Take(200).ToListAsync(ct);
+        var supplierIds = purchases.Select(x => x.SupplierGlobalId).Distinct().ToArray();
+        ViewBag.SupplierNames = await db.Suppliers.AsNoTracking()
+            .Where(x => x.BusinessId == tenant.BusinessId && supplierIds.Contains(x.GlobalId))
+            .ToDictionaryAsync(x => x.GlobalId, x => x.Name, ct);
         return View(purchases);
     }
 

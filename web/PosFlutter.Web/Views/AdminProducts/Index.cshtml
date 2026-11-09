@@ -5,11 +5,19 @@
 <link rel="stylesheet" href="~/css/admin-products.css" asp-append-version="true" />
 <main id="ap-root" class="ap-shell" data-lab-writes="@(canWrite ? "true" : "false")">
     <header class="ap-header">
-        <div><p class="ap-overline">POSFlutter Web · Catálogo</p><h1>Productos y precios</h1>
-        <p>Consulta del catálogo del negocio; cambios de prueba protegidos exclusivamente en IIS LAB.</p></div>
+        <div><p class="ap-overline">POSFlutter Web · Catálogo</p><h1>Productos</h1>
+        <p>Administra el catálogo, precios de venta y alertas de stock.</p></div>
+        @if (canWrite)
+        {
+            <a class="ap-primary-action" href="#ap-editor">＋ Nuevo producto</a>
+        }
+        else
+        {
+            <button class="ap-primary-action" type="button" disabled aria-describedby="ap-readonly-note">＋ Nuevo producto</button>
+        }
         <nav aria-label="Administración"><a href="/admin/categories">Categorías</a><a href="/supervision">Supervisión</a><a href="/reports">Reportes</a></nav>
     </header>
-    <p class="ap-notice" role="note">@(canWrite ? "LAB: edición autorizada solo en la base aislada de pruebas." : "Solo lectura: altas y cambios desactivados por seguridad hasta la aceptación de laboratorio.")</p>
+    <p id="ap-readonly-note" class="ap-notice" role="note">@(canWrite ? "Crear un producto no agrega existencias; registra una compra o entrada para aumentarlo." : "Solo lectura: altas y cambios desactivados por seguridad hasta la aceptación de laboratorio.")</p>
     <p id="ap-status" role="status" aria-live="polite">Consultando productos…</p>
     <section class="ap-list" aria-labelledby="ap-list-title">
         <div class="ap-toolbar"><h2 id="ap-list-title">Catálogo</h2><label>Buscar <input id="ap-filter" type="search" placeholder="Nombre, código o código de barras" /></label><button type="button" id="ap-reload">Actualizar</button></div>

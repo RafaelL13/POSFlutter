@@ -14,28 +14,42 @@ un renderizado o un ZIP no sustituye una certificación comercial.
 | 7 | Reportes y exportaciones | VERIFICADO | P039 pruebas/exportaciones y P042 HTTPS | Ninguna por este bloque. |
 | 8 | Autorización y aislamiento tenant | VERIFICADO | P042 Security7 y regresión 136/136 histórica | Ninguna por este bloque. |
 | 9 | Productos y categorías | IMPLEMENTADO SIN VERIFICAR | Productos V8 PASS; Categorías renderiza estado vacío V10 | Evidencia visual V10.1 comparable. |
-| 10 | Dashboard con indicadores reales | IMPLEMENTADO SIN VERIFICAR | Corrección V10.1 del desempaquetado de `items` | Captura autenticada V10.1 con datos LAB. |
-| 11 | Drawer y navegación táctil | IMPLEMENTADO SIN VERIFICAR | Corrección V10.1 de visibilidad/eventos | Captura y prueba de foco/navegación V10.1. |
-| 12 | Paridad visual de seis vistas prioritarias | PENDIENTE | Auditoría P04 V9: 5 FAIL/1 REVIEW_REQUIRED | Comparación Flutter–MVC V10.1. |
+| 10 | Dashboard con indicadores reales | VERIFICADO | P04 R7.4, Dashboard autenticado con métricas y accesos rápidos LAB | Ninguna por este bloque. |
+| 11 | Drawer y navegación táctil | VERIFICADO | P04 R7.4: apertura/cierre, Escape y restauración de foco PASS | Ninguna por este bloque. |
+| 12 | Paridad visual de seis vistas prioritarias | VERIFICADO | P04 R7.4: seis capturas autenticadas y comparación contractual PASS | Ninguna por este bloque. |
 | 13 | Sincronización Android extremo a extremo | IMPLEMENTADO SIN VERIFICAR | Pruebas Flutter SQLite previas | Pull autenticado LAB hacia SQLite con dispositivo autorizado. |
 | 14 | Compatibilidad de cantidades decimales | BLOQUEADO | `docs/DECIMAL_QUANTITY_COMPATIBILITY.md`; entidades y contratos vigentes usan `int` | Definición comercial de fracciones, escala, redondeo y capacidad Android; después migración SQL/API/Flutter versionada. |
-| 15 | Paquete IIS, instalación y rollback | IMPLEMENTADO SIN VERIFICAR | `Build-PosFlutterWebCandidate.ps1`, install/preflight no-apply | IIS LAB autorizado y health posterior. |
+| 15 | Paquete IIS, instalación y rollback | IMPLEMENTADO SIN VERIFICAR | candidato 20261107, backup/restauración staged con manifiesto SHA-256, simulación y preflight no-apply PASS | IIS LAB autorizado, cambio de PhysicalPath y health posterior. |
 | 16 | Despliegue productivo | PENDIENTE | No autorizado | Destino, respaldo y autorización explícita. |
 | 17 | Android release firmado | BLOQUEADO | Keystore original preservada; Flutter 3.47.1/Dart 3.13.1, Gradle 9.3.1 y JDK 17.0.12 disponibles localmente | Credenciales originales de firma (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) por mecanismo autorizado; no se generará ni sustituirá certificado. |
 
 ## Totales
 
 - Total: 17 requisitos.
-- VERIFICADO: 8.
-- IMPLEMENTADO SIN VERIFICAR: 5.
-- PENDIENTE: 2.
+- VERIFICADO: 11.
+- IMPLEMENTADO SIN VERIFICAR: 3.
+- PENDIENTE: 1.
 - BLOQUEADO: 2.
 - NO APLICA: 0.
 
-No se calcula un nuevo porcentaje global: los criterios tienen riesgos y pesos
-distintos, y la evidencia no permite convertir los conteos en un porcentaje de
-aceptación comercial confiable. La referencia histórica de 63% queda separada
-de esta matriz.
+La matriz ponderada `POSWEB_ACCEPTANCE_BASELINE.md` conserva los pesos de
+aceptación: 91.6% de crédito contractual (92% redondeado) tras A08/A16 y A17.
+No representa certificación productiva; los bloqueos de IIS, migración de
+datos, firma Android y autorización de producción continúan independientes.
+
+## Reconciliación R7.4 — 2026-11-07
+
+- P04 cerró Dashboard, POS, Productos, Compras, Inventario y Categorías con
+  sesión HTTPS LAB autenticada. A08 y A16 pasan a `COMPLETADO_VERIFICADO` en
+  la matriz ponderada; el avance contractual pasa de 89% histórico a **90.8%
+  (91% redondeado)**. No se altera ningún otro peso.
+- A13 permanece `IMPLEMENTADO_NO_VERIFICADO`: el preflight de sólo lectura
+  validó paquete, binding y listener, pero `/health` del IIS LAB fue
+  `UNREACHABLE` y la sesión no tiene privilegio para modificar IIS.
+- A14 es trabajo técnico pendiente sobre el destino SQL LAB identificado; A17
+  queda IMPLEMENTADO SIN VERIFICAR tras simulación aislada de backup/reversión.
+  A18/A19 requieren autorización externa de copia de datos y destino
+  productivo. P11 sigue bloqueado por credenciales originales.
 
 ## Actualización Android release — 2026-11-06
 
@@ -45,7 +59,7 @@ de esta matriz.
 - La keystore original se conserva sin modificación. No se generó certificado,
   no se descargaron herramientas y no se ejecutó una nueva compilación release.
 
-## Paquete comercial candidato
+## Paquete comercial previo
 
 `C:\POSFlutter_Web\artifacts\POSFlutter_Web_COMMERCIAL_CANDIDATE_20261106_HEALTHCHECK_WAIT.zip`
 
@@ -144,3 +158,40 @@ instalación. Se validó su estructura y extracción; no se instaló en IIS.
   SHA-256 `8E4B772CE2D1DAD03E6B0242F2ECA690D3B0A55A47A2C0C7279F1D80BA819FEF`.
   Aplicar el cambio queda bloqueado por privilegios IIS administrativos de la
   sesión actual; no se modificó producción ni otro sitio.
+
+## A17 — backup y reversión staged (2026-11-07)
+
+- IMPLEMENTADO/PROBADO EN AISLAMIENTO: se añadieron
+  `deploy\iis\Backup-PosFlutterWebLab.ps1` y
+  `deploy\iis\Rollback-PosFlutterWebLab.ps1`. Ambos validan rutas nuevas,
+  exigen `-Apply -OwnerAuthorized` para escribir, generan/verifican un
+  manifiesto SHA-256 y nunca sobrescriben un despliegue ni cambian IIS.
+- EVIDENCIA: parser PowerShell 5.1 PASS; simulación de copia, validación y
+  restauración staged PASS en
+  `%TEMP%\posweb-rollback-sim-a2a5cf57d2e1479a8722bd97fc553bcb`.
+  El instalador del paquete nuevo pasó preflight sin escritura.
+- PENDIENTE EXTERNO: ejecutar el procedimiento con un directorio y un IIS LAB
+  autorizados, y comprobar `/health` tras el cambio de PhysicalPath. Por ello
+  A17 es IMPLEMENTADO_NO_VERIFICADO, no CERTIFICADO.
+- CANDIDATO VIGENTE: `C:\POSFlutter_Web\artifacts\POSFlutter_Web_COMMERCIAL_CANDIDATE_20261107_INSTALLATION_GUARD.zip`,
+  SHA-256 `4476E7AE6E382D1646B0C37B27525D4CA8A0A9731CAE4DA94CC0B1AE500A7802`.
+
+## Autorizaciones mínimas pendientes — 2026-11-07
+
+| Gate | Autorización o insumo indispensable | Estado actual |
+|---|---|---|
+| A13/A17 | Administrador IIS LAB, directorio LAB nuevo, conexión SQL LAB segura y ventana para validar `/health` | BLOCKED_EXTERNO |
+| A14 | CERRADO: A14 LAB nueva/vacía migrada y auditada; no se modificaron bases existentes | VERIFICADO |
+| A18 | Origen/destino, responsable, ventana, retención de backup y rollback aprobados por escrito | BLOCKED_EXTERNO |
+| P11 | Cuatro credenciales originales de firma mediante mecanismo autorizado | BLOCKED_EXTERNO |
+| A19 | Destino productivo, respaldo validado y autorización explícita de despliegue | BLOCKED_EXTERNO |
+
+## A13/A17 — bloqueo de infraestructura confirmado (2026-11-07)
+
+- La autorización de intervención está registrada, pero la sesión actual no
+  puede leer `redirection.config` mediante `appcmd`; por tanto no puede probar
+  que `POSFlutterWeb_LAB` sea el único destino afectado. No se aplicó ningún
+  cambio. Se requiere sesión elevada con administración IIS antes de continuar.
+- A18 sigue BLOCKED por falta de origen/destino comercial identificados; P11
+  por credenciales originales de firma; A19 por destino y autorización de
+  producción. No se repitieron búsquedas ni pruebas aprobadas.

@@ -7,6 +7,11 @@ var connection = Environment.GetEnvironmentVariable("ConnectionStrings__SqlServe
     ?? throw new InvalidOperationException("ConnectionStrings__SqlServer is required.");
 var password = Environment.GetEnvironmentVariable("POSFLUTTER_LAB_PASSWORD")
     ?? throw new InvalidOperationException("POSFLUTTER_LAB_PASSWORD is required.");
+var p04VisualScenario = string.Equals(
+    Environment.GetEnvironmentVariable("POSFLUTTER_LAB_SCENARIO"),
+    "P04_VISUAL",
+    StringComparison.Ordinal);
+var labBusinessName = p04VisualScenario ? "P04 LAB TEMPORAL" : "POSFlutter MVC Lab";
 var builder = new SqlConnectionStringBuilder(connection);
 if (string.IsNullOrWhiteSpace(builder.InitialCatalog) ||
     !(builder.InitialCatalog.StartsWith("POSFlutter_MvcLab_", StringComparison.Ordinal) ||
@@ -33,7 +38,7 @@ if (await db.Businesses.AnyAsync())
                      join existingBranch in db.Branches on existingBusiness.Id equals existingBranch.BusinessId
                      join existingDevice in db.Devices on existingBranch.Id equals existingDevice.BranchId
                      join existingUser in db.Users on existingBusiness.Id equals existingUser.BusinessId
-                     where existingBusiness.Name == "POSFlutter MVC Lab" && existingUser.Username == "web.lab"
+                     where existingBusiness.Name == labBusinessName && existingUser.Username == "web.lab"
                      select new { BusinessGlobalId = existingBusiness.GlobalId, BranchGlobalId = existingBranch.GlobalId, DeviceGlobalId = existingDevice.GlobalId, UserGlobalId = existingUser.GlobalId, existingUser.Username }).SingleAsync();
     // This utility is guarded to the disposable lab database above. Keeping the
     // laboratory account aligned with its process-only secret makes reruns repeatable.
@@ -108,16 +113,37 @@ if (await db.Businesses.AnyAsync())
     return;
 }
 var now = DateTimeOffset.UtcNow;
-var business = new Business { GlobalId = Guid.NewGuid(), Name = "POSFlutter MVC Lab", Active = true, CreatedAt = now, UpdatedAt = now };
+var business = new Business { GlobalId = Guid.NewGuid(), Name = labBusinessName, Active = true, CreatedAt = now, UpdatedAt = now };
 db.Businesses.Add(business); await db.SaveChangesAsync();
 var branch = new Branch { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = "Laboratorio", Active = true, CreatedAt = now, UpdatedAt = now };
 db.Branches.Add(branch); await db.SaveChangesAsync();
 var device = new Device { GlobalId = Guid.NewGuid(), BranchId = branch.Id, Name = "Web Lab", Mode = "PointOfSale", Active = true, CreatedAt = now, LastSyncAt = now };
 var hash = PasswordHashing.Create(password);
 var user = new UserAccount { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = "Operador laboratorio", Username = "web.lab", PasswordHash = hash.Hash, PasswordSalt = hash.Salt, Role = "Administrator", Active = true, CreatedAt = now, UpdatedAt = now };
-var supplier = new Supplier { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = "Proveedor laboratorio", Active = true, UpdatedAt = now };
-var product = new Product { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Code = "LAB-001", Name = "Producto de laboratorio", Presentation = "Pieza", SalePriceCents = 1250, MinimumStock = 2, Active = true, UpdatedAt = now };
+var supplier = new Supplier { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Name = p04VisualScenario ? "ProveedorFIFO" : "Proveedor laboratorio", Active = true, UpdatedAt = now };
+var product = new Product { GlobalId = Guid.NewGuid(), BusinessId = business.Id, Code = p04VisualScenario ? "FIFO001" : "LAB-001", Name = p04VisualScenario ? "ProductoFIFO" : "Producto de laboratorio", Presentation = "Pieza", SalePriceCents = p04VisualScenario ? 15000 : 1250, MinimumStock = 2, Active = true, UpdatedAt = now };
 db.AddRange(device, user, supplier, product); await db.SaveChangesAsync();
-db.InventoryLots.Add(new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 10, AvailableQuantity = 10, UnitCostCents = 700, Active = true, CreatedAt = now });
-await db.SaveChangesAsync();
-Console.WriteLine($"BUSINESS={business.GlobalId};DEVICE={device.GlobalId};USER={user.Username};SUPPLIER={supplier.GlobalId};PRODUCT={product.GlobalId}");
+if (!p04VisualScenario)
+{
+    db.InventoryLots.Add(new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 10, AvailableQuantity = 10, UnitCostCents = 700, Active = true, CreatedAt = now });
+    await db.SaveChangesAsync();
+}
+else
+{
+    // Visual-only fixture: two internally consistent FIFO purchases leave three
+    // units available. It is permitted only in a newly named disposable LAB.
+    var first = new Purchase { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, DeviceId = device.Id, UserId = user.Id, SupplierGlobalId = supplier.GlobalId, PurchaseDate = now.AddDays(-1), Reference = "P04-VISUAL-1", TotalCents = 40000, Status = "Confirmed", CreatedAt = now.AddDays(-1) };
+    var second = new Purchase { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, DeviceId = device.Id, UserId = user.Id, SupplierGlobalId = supplier.GlobalId, PurchaseDate = now, Reference = "P04-VISUAL-2", TotalCents = 50000, Status = "Confirmed", CreatedAt = now };
+    db.Purchases.AddRange(first, second); await db.SaveChangesAsync();
+    var firstLine = new PurchaseLine { GlobalId = Guid.NewGuid(), PurchaseId = first.Id, ProductGlobalId = product.GlobalId, Quantity = 1, UnitCostCents = 40000, SubtotalCents = 40000 };
+    var secondLine = new PurchaseLine { GlobalId = Guid.NewGuid(), PurchaseId = second.Id, ProductGlobalId = product.GlobalId, Quantity = 2, UnitCostCents = 25000, SubtotalCents = 50000 };
+    db.PurchaseLines.AddRange(firstLine, secondLine); await db.SaveChangesAsync();
+    db.InventoryLots.AddRange(
+        new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, PurchaseLineGlobalId = firstLine.GlobalId, EntryDate = first.PurchaseDate, InitialQuantity = 1, AvailableQuantity = 1, UnitCostCents = firstLine.UnitCostCents, Active = true, CreatedAt = first.PurchaseDate },
+        new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, PurchaseLineGlobalId = secondLine.GlobalId, EntryDate = second.PurchaseDate, InitialQuantity = 2, AvailableQuantity = 2, UnitCostCents = secondLine.UnitCostCents, Active = true, CreatedAt = second.PurchaseDate });
+    db.InventoryMovements.AddRange(
+        new InventoryMovement { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, MovementDate = first.PurchaseDate, Type = "Purchase", QuantityDelta = 1, PreviousStock = 0, NewStock = 1, ReferenceGlobalId = first.GlobalId, UserId = user.Id, DeviceId = device.Id, Notes = "P04 visual fixture" },
+        new InventoryMovement { GlobalId = Guid.NewGuid(), BusinessId = business.Id, BranchId = branch.Id, ProductGlobalId = product.GlobalId, MovementDate = second.PurchaseDate, Type = "Purchase", QuantityDelta = 2, PreviousStock = 1, NewStock = 3, ReferenceGlobalId = second.GlobalId, UserId = user.Id, DeviceId = device.Id, Notes = "P04 visual fixture" });
+    await db.SaveChangesAsync();
+}
+Console.WriteLine($"SCENARIO={(p04VisualScenario ? "P04_VISUAL" : "DEFAULT")};BUSINESS={business.GlobalId};DEVICE={device.GlobalId};USER={user.Username};SUPPLIER={supplier.GlobalId};PRODUCT={product.GlobalId}");

@@ -10,7 +10,7 @@
   const make = (tag, value) => { const node = document.createElement(tag); node.textContent = String(value ?? ''); return node; };
   const get = async path => {
     const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
-    if (response.status === 401) throw new Error('Tu sesiÃ³n expirÃ³; inicia sesiÃ³n nuevamente.');
+    if (response.status === 401) throw new Error('Tu sesión expiró; inicia sesión nuevamente.');
     if (response.status === 403) throw new Error('Tu usuario no tiene permiso para consultar este catÃ¡logo.');
     if (!response.ok) throw new Error(`No se pudo cargar ${path}: HTTP ${response.status}`);
     const data = await response.json();
@@ -63,7 +63,7 @@
         categories.filter(c => c.active).forEach(c => select.add(new Option(c.name, c.globalId)));
         select.value = selected;
       }
-      render(); status(`${products.length} productos visibles desde la sesiÃ³n autorizada. ${canWrite ? 'Escritura LAB habilitada.' : 'Solo lectura.'}`);
+      render(); status(`${products.length} productos visibles desde la sesión autorizada. ${canWrite ? 'Escritura LAB habilitada.' : 'Solo lectura.'}`);
     } catch (err) { status(err.message || 'Error consultando catÃ¡logo.', true); }
   };
   const submit = async event => {

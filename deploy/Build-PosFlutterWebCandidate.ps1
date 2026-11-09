@@ -18,7 +18,9 @@ function Test-PackageLayout([string]$PackagePath) {
         'release/PosFlutter.Web.dll', 'release/Infrastructure.dll', 'release/web.config',
         'release/appsettings.json', 'release/wwwroot/css/site.css', 'release/wwwroot/js/site.js',
         'iis/Install-PosFlutterWeb.ps1', 'iis/Preflight-PosFlutterWebLab.ps1',
-        'iis/Verify-PosFlutterWeb.ps1', 'MANIFEST.sha256', 'INSTALLATION.md'
+        'iis/Verify-PosFlutterWeb.ps1', 'iis/Backup-PosFlutterWebLab.ps1',
+        'iis/Rollback-PosFlutterWebLab.ps1', 'sql/Apply-PosFlutterLabMigrations.ps1',
+        'MANIFEST.sha256', 'INSTALLATION.md'
     )
     $archive = [System.IO.Compression.ZipFile]::OpenRead($PackagePath)
     try {
@@ -31,8 +33,10 @@ function Test-PackageLayout([string]$PackagePath) {
 
 $project = Join-Path $RepositoryRoot 'web\PosFlutter.Web\PosFlutter.Web.csproj'
 $iisSource = Join-Path $RepositoryRoot 'deploy\iis'
+$sqlSource = Join-Path $RepositoryRoot 'deploy\sql'
 Require (Test-Path -LiteralPath $project) 'WEB_PROJECT_MISSING'
 Require (Test-Path -LiteralPath $iisSource) 'IIS_SCRIPTS_MISSING'
+Require (Test-Path -LiteralPath $sqlSource) 'SQL_SCRIPTS_MISSING'
 New-Item -ItemType Directory -Force -Path $ArtifactsRoot | Out-Null
 
 $stage = Join-Path $ArtifactsRoot ($CandidateName + '_stage')
@@ -45,6 +49,7 @@ try {
     & dotnet publish $project -c Release --no-restore -o (Join-Path $stage 'release') --nologo
     Require ($LASTEXITCODE -eq 0) 'DOTNET_PUBLISH_FAILED'
     Copy-Item -LiteralPath $iisSource -Destination (Join-Path $stage 'iis') -Recurse
+    Copy-Item -LiteralPath $sqlSource -Destination (Join-Path $stage 'sql') -Recurse
     Copy-Item -LiteralPath (Join-Path $RepositoryRoot 'docs\CLEAN_INSTALL.md') -Destination (Join-Path $stage 'INSTALLATION.md')
 
     $secretPattern = '(?i)(password\s*=\s*(?!SET_IN_IIS_OR_SECURE_FILE)|"password"\s*:\s*"(?!SET_IN_IIS_OR_SECURE_FILE))'

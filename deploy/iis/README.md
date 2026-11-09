@@ -6,6 +6,19 @@
 4. Create an IIS site with an HTTPS binding and an application pool set to **No Managed Code**.
 5. Run `Verify-PosFlutterWeb.ps1 -BaseUrl https://your-lab-host`.
 
+## Backup and staged reversal
+
+Before changing an authorized LAB IIS PhysicalPath, capture the published
+release with `Backup-PosFlutterWebLab.ps1`. It requires a **new** backup
+directory and writes `backup-manifest.json` with SHA-256 values. Its default
+mode is a non-mutating plan; file copying requires both `-Apply` and
+`-OwnerAuthorized`.
+
+`Rollback-PosFlutterWebLab.ps1` validates every hash and restores only into a
+new staging directory. It never overwrites a deployment or changes IIS. After
+the staged files have been verified, an authorized IIS administrator may point
+the LAB site back to that release under the approved change procedure.
+
 The package contains no database migration command and does not deploy, seed, or modify production databases.
 
 ## Read-only preflight

@@ -30,6 +30,8 @@
     const status = document.getElementById('status');
     const title = document.getElementById('page-title');
     if (!content || !status || !title) return;
+    document.body.classList.add('pos-tablet-active');
+    document.body.dataset.posRenderer = 'tablet-parity';
     title.textContent = 'Nueva venta';
     content.replaceChildren();
     const cart = new Map();
@@ -99,13 +101,25 @@
   printable.focus(); printable.print();
   onMessage(changed ? 'CotizaciÃ³n generada. Precios cambiaron; actualiza el catÃ¡logo antes de cobrar.' : 'CotizaciÃ³n generada sin registrar venta.');
 };
-const drawCart = () => {
-      cartPanel.replaceChildren(create('h2', 'Carrito'));
+    const drawCart = () => {
       const lines = [...cart.values()];
-      if (!lines.length) { cartPanel.append(create('p', 'Agrega productos para iniciar la venta.', 'pos-empty')); return; }
       const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
+      cartPanel.replaceChildren(create('h2', `Carrito · ${quantity} artículos`));
+      if (!lines.length) {
+        const empty = create('section', undefined, 'pos-cart-empty');
+        const disabledCheckout = button('Cobrar $0.00', () => {}, 'primary pos-checkout');
+        disabledCheckout.disabled = true;
+        empty.append(
+          create('span', '🛒', 'pos-cart-empty-icon'),
+          create('strong', 'Agrega productos para iniciar la venta.'),
+          create('p', 'Subtotal  $0.00', 'pos-cart-subtotal'),
+          create('p', 'Total  $0.00', 'pos-cart-total'),
+          disabledCheckout,
+          create('p', 'Agrega al menos un producto para cobrar.', 'muted'));
+        cartPanel.append(empty);
+        return;
+      }
       const total = lines.reduce((sum, line) => sum + (Number(line.product.salePriceCents) || 0) * line.quantity, 0);
-      cartPanel.append(create('span', `${quantity} artículos`, 'cart-count'));
       const lineList = create('div', undefined, 'tablet-cart-lines');
       lines.forEach(({ product, quantity: lineQuantity }) => {
         const row = create('article', undefined, 'tablet-cart-line');
@@ -179,4 +193,5 @@ const drawCart = () => {
     document.querySelectorAll('#nav button').forEach(button => button.classList.toggle('active', button === trigger));
     renderPos();
   }, true);
+  window.POSFlutterRenderPos = renderPos;
 })();

@@ -31,8 +31,22 @@ if(!app.Environment.IsDevelopment()) { app.UseExceptionHandler("/Home/Error"); a
 app.UseHttpsRedirection(); app.UseStaticFiles(); app.UseRouting();
 app.Use(async (ctx,next)=> { ctx.Response.Headers["X-Content-Type-Options"]="nosniff";ctx.Response.Headers["Referrer-Policy"]="no-referrer";ctx.Response.Headers["X-Frame-Options"]="DENY";ctx.Response.Headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";ctx.Response.Headers["Cache-Control"]="no-store";await next(); });
 app.UseSession(); app.UseRateLimiter();
-app.MapGet("/health",async (PosDbContext db,CancellationToken ct) =>
-    await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status="healthy",sqlServer=true }) : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+app.MapGet("/health", async Task<IResult> (PosDbContext db, CancellationToken ct) =>
+{
+    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    deadline.CancelAfter(TimeSpan.FromSeconds(5));
+    try
+    {
+        var connected = await db.Database.CanConnectAsync(deadline.Token);
+        if (connected) return Results.Ok(new { status = "healthy", sqlServer = true });
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+    {
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+});
 app.MapControllerRoute(name:"default",pattern:"{controller=Home}/{action=Index}/{id?}");
 app.Run();
 public partial class Program { }
