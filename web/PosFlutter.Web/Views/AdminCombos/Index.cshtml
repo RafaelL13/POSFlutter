@@ -1,0 +1,45 @@
+@{
+    ViewData["Title"] = "Administración de combos";
+    var writeAllowed = (bool)(ViewData["CanWriteLab"] ?? false);
+}
+<link rel="stylesheet" href="/css/admin-combos.css" />
+<main class="combos-admin" id="combosAdmin" data-can-write="@writeAllowed.ToString().ToLowerInvariant()">
+    <header class="combos-head">
+        <div><h1>Administración de combos</h1><p>Define componentes, cantidades y precios fijos por producto. Los combos anteriores mantienen su cálculo proporcional.</p></div>
+        <a href="/admin/products" class="combos-back">Volver a productos</a>
+    </header>
+    @if (!writeAllowed) {
+        <p class="combos-warning" role="status">Modo de consulta: las escrituras de combos están deshabilitadas en este entorno.</p>
+    }
+    <div class="combos-grid">
+        <section aria-labelledby="combosCatalogTitle" class="combos-panel">
+            <h2 id="combosCatalogTitle">Combos existentes</h2>
+            <label for="comboSelect">Seleccionar combo</label>
+            <select id="comboSelect"><option value="">Nuevo combo</option></select>
+            <button id="newComboButton" type="button">Nuevo combo</button>
+            <p id="loadStatus" role="status"></p>
+        </section>
+        <section aria-labelledby="comboEditorTitle" class="combos-panel">
+            <h2 id="comboEditorTitle">Editor</h2>
+            <form id="comboForm" novalidate>
+                @Html.AntiForgeryToken()
+                <div class="combos-row">
+                    <label>Código <input id="comboCode" maxlength="80" required autocomplete="off" /></label>
+                    <label>Nombre <input id="comboName" maxlength="160" required autocomplete="off" /></label>
+                </div>
+                <div class="combos-row">
+                    <label>Precio total ($ MXN) <input id="comboPrice" inputmode="decimal" placeholder="0.00" required /></label>
+                    <label class="combos-check"><input type="checkbox" id="comboActive" checked /> Activo</label>
+                </div>
+                <h3>Componentes</h3>
+                <p class="combos-help">Para usar precio fijo, especifica un precio unitario positivo en todos los componentes. Si los dejas vacíos, se mantiene la distribución proporcional.</p>
+                <div id="comboComponents" aria-label="Productos incluidos"></div>
+                <button id="addComponentButton" type="button">Agregar producto</button>
+                <p id="priceSummary" aria-live="polite"></p>
+                <button id="saveComboButton" type="submit" disabled>Guardar combo</button>
+                <p id="saveStatus" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+    </div>
+</main>
+<script src="/js/admin-combos.js" defer></script>

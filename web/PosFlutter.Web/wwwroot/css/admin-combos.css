@@ -1,0 +1,13 @@
+.combos-admin{max-width:1200px;margin:1.5rem auto;padding:0 1rem;font:inherit;color:inherit}
+.combos-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.combos-head h1{font-size:1.8rem;margin:.25rem 0}.combos-head p{max-width:680px;margin:.25rem 0}
+.combos-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:1rem}
+.combos-panel{padding:1.25rem;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#111827;box-shadow:0 2px 8px #0000000c}
+.combos-panel h2{font-size:1.3rem;margin:0 0 1rem}.combos-panel h3{font-size:1.1rem;margin:1.2rem 0 .6rem}
+.combos-panel label{display:block;font-weight:600;margin-bottom:.75rem}.combos-panel input:not([type=checkbox]),.combos-panel select,.combos-panel button,.combos-panel #comboSelect{width:100%;padding:.6rem;border-radius:6px;border:1px solid #64748b;font:inherit}
+.combos-panel button{background:#1453a6;color:white;border-color:#1453a6;cursor:pointer;margin:.3rem 0 .6rem}.combos-panel button:disabled{opacity:.55;cursor:not-allowed}
+.combos-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}.combos-panel .combos-check{display:flex;align-items:center;gap:.5rem}
+.combos-component{display:grid;grid-template-columns:minmax(120px,2fr) minmax(65px,.6fr) minmax(100px,1fr) auto;gap:.5rem;margin-bottom:.7rem;align-items:end}
+.combos-component label{margin:0}.combos-component button{width:auto;padding:.6rem}.combos-warning{padding:.8rem;background:#fff3c4;color:#593e00;border-radius:6px}
+.combos-help{font-size:.92rem}.combos-back{color:#1453a6}.combos-admin [role=status]{min-height:1.5em}
+@media(max-width:800px){.combos-grid{grid-template-columns:1fr}.combos-row{grid-template-columns:1fr}.combos-component{grid-template-columns:1fr 1fr}.combos-component label:first-child{grid-column:span 2}}

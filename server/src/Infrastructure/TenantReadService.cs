@@ -139,21 +139,26 @@ public sealed class TenantReadService(PosDbContext db)
     {
         await AuthorizeAsync(tenant, BackendReadCapability.ProductsRead, cancellationToken);
         return await _db.Products.AsNoTracking()
-            .Where(x => x.BusinessId == tenant.BusinessId)
-            .OrderBy(x => x.Name)
-            .Select(x => (object)new
+            .Where(product => product.BusinessId == tenant.BusinessId)
+            .OrderBy(product => product.Name)
+            .Select(product => (object)new
             {
-                x.GlobalId,
-                x.Code,
-                x.Barcode,
-                x.Name,
-                x.Presentation,
-                x.SalePriceCents,
-                x.MinimumStock,
-                x.Active,
-                x.ServerVersion
-            })
-            .ToListAsync(cancellationToken);
+                product.GlobalId,
+                product.Code,
+                product.Barcode,
+                product.Name,
+                product.Presentation,
+                product.SalePriceCents,
+                product.MinimumStock,
+                CategoryName = _db.Categories.AsNoTracking()
+                    .Where(category => category.BusinessId == tenant.BusinessId && category.GlobalId == product.CategoryGlobalId)
+                    .Select(category => category.Name).FirstOrDefault(),
+                AvailableQuantity = _db.InventoryLots.AsNoTracking()
+                    .Where(lot => lot.BusinessId == tenant.BusinessId && lot.BranchId == tenant.BranchId && lot.Active && lot.AvailableQuantity > 0 && lot.ProductGlobalId == product.GlobalId)
+                    .Select(lot => (int?)lot.AvailableQuantity).Sum() ?? 0,
+                product.Active,
+                product.ServerVersion
+            }).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<object>> CategoriesAsync(
@@ -520,13 +525,17 @@ public sealed class TenantReadService(PosDbContext db)
 
     public async Task<IReadOnlyList<object>> DevicesAsync(
         SyncTenantContext tenant,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? branchGlobalId = null,
+        Guid? deviceGlobalId = null)
     {
         await AuthorizeAsync(tenant, BackendReadCapability.DevicesRead, cancellationToken);
         return await (
             from device in _db.Devices.AsNoTracking()
             join branch in _db.Branches.AsNoTracking() on device.BranchId equals branch.Id
             where branch.BusinessId == tenant.BusinessId
+                && (branchGlobalId == null || branch.GlobalId == branchGlobalId)
+                && (deviceGlobalId == null || device.GlobalId == deviceGlobalId)
             orderby device.Name
             select (object)new
             {

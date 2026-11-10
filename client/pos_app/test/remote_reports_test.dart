@@ -16,6 +16,7 @@ final class _FakeApi implements JsonApiClient {
   Future<Map<String, Object?>> get(
     String path, {
     Map<String, String>? query,
+    Map<String, String>? headers,
   }) async {
     lastPath = path;
     lastQuery = query;

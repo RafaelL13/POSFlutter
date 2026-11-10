@@ -38,3 +38,6 @@ POSFlutter_RECONSTRUCTED_CANONICAL*.zip
 
 # Flutter generated Android plugin registrant
 client/pos_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+# POSFlutter: evidencia local y pruebas aisladas
+/artifacts/
+/server/tests/_P038_J9_R3_Isolated/

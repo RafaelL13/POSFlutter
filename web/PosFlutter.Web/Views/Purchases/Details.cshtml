@@ -1,0 +1,18 @@
+@model Pos.Domain.Purchase
+@{
+    ViewData["Title"] = "Detalle de compra";
+}
+<h1>Detalle de compra</h1>
+<p><a href="/purchases">Volver a compras</a></p>
+<dl class="row">
+  <dt class="col-sm-3">Compra</dt><dd class="col-sm-9">@Model.GlobalId</dd>
+  <dt class="col-sm-3">Fecha</dt><dd class="col-sm-9">@Model.PurchaseDate.ToLocalTime().ToString("g")</dd>
+  <dt class="col-sm-3">Proveedor</dt><dd class="col-sm-9">@Model.SupplierGlobalId</dd>
+  <dt class="col-sm-3">Estado</dt><dd class="col-sm-9">@Model.Status</dd>
+  <dt class="col-sm-3">Total</dt><dd class="col-sm-9">@((Model.TotalCents/100m).ToString("C"))</dd>
+</dl>
+<table class="table table-striped"><thead><tr><th>Producto</th><th>Cantidad</th><th>Costo unitario</th><th>Subtotal</th><th>Lote FIFO</th><th>Disponible</th></tr></thead><tbody>
+@foreach (var line in Model.Lines) {
+  <tr><td>@line.ProductGlobalId</td><td>@line.Quantity</td><td>@((line.UnitCostCents/100m).ToString("C"))</td><td>@((line.SubtotalCents/100m).ToString("C"))</td><td>@line.Lot?.GlobalId</td><td>@line.Lot?.AvailableQuantity</td></tr>
+}
+</tbody></table>

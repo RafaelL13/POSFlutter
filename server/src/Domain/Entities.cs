@@ -16,7 +16,7 @@ public sealed class InitialInventoryLine { public long Id { get; set; } public G
 public sealed class Sale { public long Id { get; set; } public Guid GlobalId { get; set; } public Guid IdempotencyKey { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public long DeviceId { get; set; } public long UserId { get; set; } public string Folio { get; set; } = ""; public DateTimeOffset SaleDateTime { get; set; } public long SubtotalCents { get; set; } public long DiscountCents { get; set; } public long TotalCents { get; set; } public long FifoCostCents { get; set; } public long GrossProfitCents { get; set; } public string PaymentMethod { get; set; } = "Cash"; public long? ReceivedCents { get; set; } public long ChangeCents { get; set; } public string Status { get; set; } = "Confirmed"; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? CancelledAt { get; set; } public string? CancellationReason { get; set; } public long? CancelledByUserId { get; set; } public List<SaleLine> Lines { get; } = []; public List<SalePayment> Payments { get; } = []; }
 public sealed class SaleLine { public long Id { get; set; } public Guid GlobalId { get; set; } public long SaleId { get; set; } public Guid ProductGlobalId { get; set; } public int Quantity { get; set; } public long UnitPriceCents { get; set; } public long TotalCents { get; set; } public long FifoCostCents { get; set; } public List<SaleLotAllocation> Lots { get; } = []; }
 public sealed class SaleLotAllocation { public long Id { get; set; } public Guid GlobalId { get; set; } public long SaleLineId { get; set; } public Guid InventoryLotGlobalId { get; set; } public int Quantity { get; set; } public long UnitCostCents { get; set; } public long TotalCostCents { get; set; } }
-public sealed class SalePayment { public long Id { get; set; } public Guid GlobalId { get; set; } public long SaleId { get; set; } public string Method { get; set; } = "Cash"; public long AmountCents { get; set; } public DateTimeOffset CreatedAt { get; set; } }
+public sealed class SalePayment { public long Id { get; set; } public Guid GlobalId { get; set; } public long SaleId { get; set; } public long? CashSessionId { get; set; } public string Method { get; set; } = "Cash"; public long AmountCents { get; set; } public DateTimeOffset CreatedAt { get; set; } }
 public sealed class CashSession { public long Id { get; set; } public Guid GlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public long DeviceId { get; set; } public long UserId { get; set; } public DateTimeOffset OpenedAt { get; set; } public long OpeningBalanceCents { get; set; } public string Status { get; set; } = "Open"; public DateTimeOffset? ClosedAt { get; set; } public long? CountedCashCents { get; set; } public long? ExpectedCashCents { get; set; } public long? DifferenceCents { get; set; } public DateTimeOffset UpdatedAt { get; set; } }
 public sealed class CashMovement
 {
@@ -30,9 +30,28 @@ public sealed class CashMovement
     public long AmountCents { get; set; }
     public string? Notes { get; set; }
 }
-public sealed class Expense { public long Id { get; set; } public Guid GlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public long DeviceId { get; set; } public long UserId { get; set; } public DateTimeOffset ExpenseDate { get; set; } public string Concept { get; set; } = ""; public string? Category { get; set; } public long AmountCents { get; set; } public string PaymentMethod { get; set; } = "Cash"; public string? Notes { get; set; } public DateTimeOffset CreatedAt { get; set; } }
+public sealed class Expense { public long Id { get; set; } public Guid GlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public long DeviceId { get; set; } public long UserId { get; set; } public long? CashSessionId { get; set; } public DateTimeOffset ExpenseDate { get; set; } public string Concept { get; set; } = ""; public string? Category { get; set; } public long AmountCents { get; set; } public string PaymentMethod { get; set; } = "Cash"; public string? Notes { get; set; } public DateTimeOffset CreatedAt { get; set; } }
 public sealed class CentralInventoryTransferReceipt { public long Id { get; set; } public Guid TransferGlobalId { get; set; } public long BusinessId { get; set; } public long BranchId { get; set; } public DateTimeOffset ReceivedAt { get; set; } }
 public sealed class InboundOperation { public long Id { get; set; } public long BusinessId { get; set; } public Guid OperationGlobalId { get; set; } public string EntityType { get; set; } = ""; public Guid EntityGlobalId { get; set; } public string Operation { get; set; } = ""; public int PayloadVersion { get; set; } public string PayloadJson { get; set; } = "{}"; public DateTimeOffset ReceivedAt { get; set; } }
+
+// Append-only administrative product audit. Retained independently of synchronization cursors.
+public sealed class AdminProductAudit
+{
+    public long Id { get; set; }
+    public long BusinessId { get; set; }
+    public long BranchId { get; set; }
+    public long ActorUserId { get; set; }
+    public Guid ActorUserGlobalId { get; set; }
+    public long ActorDeviceId { get; set; }
+    public Guid ProductGlobalId { get; set; }
+    public string Operation { get; set; } = "";
+    public long? PreviousServerVersion { get; set; }
+    public long NewServerVersion { get; set; }
+    public long SyncChangeId { get; set; }
+    public string? BeforeJson { get; set; }
+    public string AfterJson { get; set; } = "{}";
+    public DateTimeOffset CreatedAt { get; set; }
+}
 public sealed class SyncChange { public long Id { get; set; } public long BusinessId { get; set; } public string EntityType { get; set; } = ""; public Guid EntityGlobalId { get; set; } public string Operation { get; set; } = ""; public long Version { get; set; } public string PayloadJson { get; set; } = "{}"; public DateTimeOffset CreatedAt { get; set; } }
 public sealed class RefreshToken { public long Id { get; set; } public long BusinessId { get; set; } public long UserId { get; set; } public long DeviceId { get; set; } public string TokenHash { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset ExpiresAt { get; set; } public DateTimeOffset? RevokedAt { get; set; } }
 public sealed class DeviceEnrollmentToken { public long Id { get; set; } public Guid GlobalId { get; set; } = Guid.NewGuid(); public string TokenHash { get; set; } = ""; public long BusinessId { get; set; } public long BranchId { get; set; } public long CreatedByUserId { get; set; } public string RequestedMode { get; set; } = "AdminReadOnly"; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset ExpiresAt { get; set; } public DateTimeOffset? UsedAt { get; set; } public long? DeviceId { get; set; } public DateTimeOffset? RevokedAt { get; set; } }

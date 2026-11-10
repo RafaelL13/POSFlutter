@@ -1,0 +1,10 @@
+@{ var canWrite = ViewData["CanWriteLab"] is bool allowed && allowed; ViewData["Title"] = "Categorías"; }
+<link rel="stylesheet" href="~/css/admin-categories.css" asp-append-version="true" />
+<main id="ac-root" class="ac-shell" data-lab-writes="@(canWrite ? "true" : "false")">
+ <header class="ac-header"><div><h1>Categorías</h1><p>Organiza los productos del catálogo.</p></div><a class="ac-primary" href="#ac-form">＋ Nueva categoría</a></header>
+ <p id="ac-status" role="status" aria-live="polite">Consultando categorías…</p>
+ <section id="ac-list" class="ac-list" aria-label="Categorías"></section>
+ @if(canWrite){<section class="ac-form-card"><h2>Nueva categoría</h2>@Html.AntiForgeryToken()<form id="ac-form"><label>Nombre<input name="name" maxlength="160" required /></label><label>Descripción<input name="description" maxlength="500" /></label><button type="submit">Guardar categoría</button></form></section>}
+ else {<p class="ac-notice">Solo lectura: el alta permanece bloqueada hasta que el host LAB autorice escrituras.</p>}
+</main>
+<script src="~/js/admin-categories.js" asp-append-version="true" defer></script>

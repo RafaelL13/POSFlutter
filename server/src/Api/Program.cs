@@ -16,7 +16,7 @@ builder.Services.AddDbContext<PosDbContext>(o=>o.UseSqlServer(connection));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.Section));
 var jwt=builder.Configuration.GetSection(JwtOptions.Section).Get<JwtOptions>() ?? new JwtOptions();
 if(string.IsNullOrWhiteSpace(jwt.SigningKey)) throw new InvalidOperationException("Jwt:SigningKey is required and must be supplied by environment/User Secrets.");
-builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>();
+builder.Services.AddScoped<TokenService>(); builder.Services.AddScoped<ITokenService>(sp=>sp.GetRequiredService<TokenService>()); builder.Services.AddScoped<ISyncService,SyncService>(); builder.Services.AddScoped<ICentralInventoryTransferService,CentralInventoryTransferService>(); builder.Services.AddScoped<DeviceEnrollmentService>(); builder.Services.AddScoped<TenantReadService>(); builder.Services.AddScoped<RemoteReportService>(); Pos.Api.WebCheckoutEndpoint.AddWebCheckout(builder.Services);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>{o.TokenValidationParameters=new TokenValidationParameters{ValidateIssuer=true,ValidIssuer=jwt.Issuer,ValidateAudience=true,ValidAudience=jwt.Audience,ValidateIssuerSigningKey=true,IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),ValidateLifetime=true,ClockSkew=TimeSpan.FromMinutes(1)};});
 builder.Services.AddAuthorization(options =>
 {
@@ -71,7 +71,18 @@ app.Use(async (context,next) =>
 if(app.Environment.IsDevelopment()){app.MapOpenApi();app.UseSwagger();app.UseSwaggerUI();}
 app.MapHealthChecks("/health");
 
-app.MapPost("/api/auth/login",async(LoginRequest r,ITokenService s,CancellationToken ct)=>(await s.LoginAsync(r,ct)) is { } a?Results.Ok(a):Results.Unauthorized());
+app.MapPost("/api/auth/login",async(LoginRequest? r,ITokenService s,CancellationToken ct)=>
+{
+    // A syntactically valid JSON object may still omit required credentials.  Reject
+    // it at the HTTP boundary instead of letting a null string reach password hashing.
+    if (r is null || r.BusinessGlobalId == Guid.Empty || r.DeviceGlobalId == Guid.Empty ||
+        string.IsNullOrWhiteSpace(r.Username) || string.IsNullOrWhiteSpace(r.Password))
+    {
+        return Results.BadRequest(new { message = "BusinessGlobalId, DeviceGlobalId, username and password are required." });
+    }
+
+    return (await s.LoginAsync(r, ct)) is { } a ? Results.Ok(a) : Results.Unauthorized();
+});
 app.MapPost("/api/auth/refresh",async(RefreshRequest r,ITokenService s,CancellationToken ct)=>(await s.RefreshAsync(r,ct)) is { } a?Results.Ok(a):Results.Unauthorized());
 
 app.MapPost("/api/bootstrap",async(BootstrapRequest r,PosDbContext db,TokenService tokens,CancellationToken ct)=>{
@@ -104,7 +115,10 @@ app.MapPost("/api/device-enrollment/invitations",async(CreateDeviceEnrollmentReq
 app.MapPost("/api/device-enrollment/recovery-invitations",async(CreateDeviceRecoveryInvitationRequest r,HttpContext http,DeviceEnrollmentService s,CancellationToken ct)=>Results.Ok(await s.CreateRecoveryInvitationAsync(TenantClaims.Require(http.User),r,ct))).RequireAuthorization("Administrator");
 app.MapPost("/api/device-enrollment/redeem",async(RedeemDeviceEnrollmentRequest r,DeviceEnrollmentService s,CancellationToken ct)=>(await s.RedeemAsync(r,ct)) is { } x?Results.Ok(x):Results.BadRequest(new{message="Unable to enroll device."})).RequireRateLimiting("enrollment");
 app.MapPost("/api/sync/push",async(SyncPushRequest r,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PushAsync(r,TenantClaims.Require(h.User),ct))).RequireAuthorization();
-app.MapGet("/api/sync/pull",async(long? cursor,int? limit,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct))).RequireAuthorization();
+app.MapGet("/api/sync/pull",async(long? cursor,int? limit,bool? purchaseV1,HttpContext h,ISyncService s,CancellationToken ct)=>Results.Ok(await s.PullAsync(cursor??0,limit??100,TenantClaims.Require(h.User),ct,purchaseV1==true))).RequireAuthorization();
+Pos.Api.WebSalePullEndpoint.Map(app);
+Pos.Api.WebCheckoutEndpoint.MapWebCheckout(app);
+Pos.Api.WebComboCatalogEndpoint.MapWebComboCatalog(app);
 
 static SyncTenantContext T(HttpContext h)=>TenantClaims.Require(h.User);
 static string R(BackendReadCapability capability) => BackendReadAuthorization.PolicyName(capability);
@@ -125,7 +139,7 @@ app.MapGet("/api/devices",async(HttpContext h,TenantReadService r,CancellationTo
 app.MapGet("/api/business",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(await r.BusinessAsync(T(h),ct))).RequireAuthorization(R(BackendReadCapability.BusinessRead));
 app.MapGet("/api/branches",async(HttpContext h,TenantReadService r,CancellationToken ct)=>Results.Ok(new{items=await r.BranchesAsync(T(h),ct)})).RequireAuthorization(R(BackendReadCapability.BranchesRead));
 
-var reportApi=app.MapGroup("/api/admin/reports").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead));
+var reportApi = app.MapGroup("/api/admin/reports").RequireAuthorization(R(BackendReadCapability.FinancialReportsRead));
 reportApi.MapGet("/summary",async(DateTimeOffset? from,DateTimeOffset? to,HttpContext h,RemoteReportService r,CancellationToken ct)=>
 {
  if(!TryReportPeriod(from,to,out var period))return Results.BadRequest(new{message="Invalid report period. Use from inclusive and to exclusive, maximum 366 days."});

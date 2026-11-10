@@ -1,0 +1,55 @@
+@{
+    ViewData["Title"] = "SupervisiÃ³n del negocio";
+}
+<link rel="stylesheet" href="~/css/supervision.css" asp-append-version="true" />
+<main id="ps-supervision" class="ps-supervision" aria-labelledby="ps-title">
+    <div class="ps-supervision__top">
+        <div>
+            <p class="ps-eyebrow">POSFlutter Web Â· AdministraciÃ³n</p>
+            <h1 id="ps-title">Centro de supervisiÃ³n</h1>
+            <p class="ps-subtitle">Ventas, existencias, productos, sucursales y equipos desde tu sesiÃ³n autorizada.</p>
+        </div>
+        <button id="ps-refresh" class="ps-btn" type="button">Actualizar ahora</button>
+    </div>
+    <div class="ps-environment" id="ps-origin" role="note">Comprobando origen de datosâ€¦</div>
+    <nav class="ps-nav" aria-label="NavegaciÃ³n administrativa">
+        <a href="/">Punto de venta</a>
+        <a href="/supervision" aria-current="page">SupervisiÃ³n</a>
+        <a href="/reports">Reportes</a>
+        <a href="/device-monitor">Dispositivos</a>
+    </nav>
+    <div class="ps-statusbar">
+        <span role="status" aria-live="polite" id="ps-status">Preparando primera consultaâ€¦</span>
+        <span id="ps-lastread">Ãšltima lectura del panel: sin datos</span>
+    </div>
+    <section class="ps-section" aria-labelledby="ps-dashboard-title">
+        <div class="ps-heading"><div><h2 id="ps-dashboard-title">Indicadores disponibles</h2><p>Se muestran Ãºnicamente valores suministrados por el servidor, sin estimar ventas con muestras limitadas.</p></div></div>
+        <div class="ps-kpis" id="ps-dashboard"><p class="ps-empty">Consultando indicadoresâ€¦</p></div>
+        <p class="ps-message" id="ps-dashboard-message" role="status"></p>
+    </section>
+    <div class="ps-grid">
+        <section class="ps-section" aria-labelledby="ps-inventory-title">
+            <div class="ps-heading"><div><h2 id="ps-inventory-title">Inventario</h2><p>Existencias devueltas por la API autorizada</p></div><span class="ps-tag" id="ps-inventory-meta"></span></div>
+            <div class="ps-table-scroller" id="ps-inventory"></div><p class="ps-message" id="ps-inventory-message"></p>
+        </section>
+        <section class="ps-section" aria-labelledby="ps-products-title">
+            <div class="ps-heading"><div><h2 id="ps-products-title">Productos</h2><p>Consulta de catÃ¡logo; ediciÃ³n de precios y combos pendiente de contrato seguro</p></div><span class="ps-tag" id="ps-products-meta"></span></div>
+            <div class="ps-table-scroller" id="ps-products"></div><p class="ps-message" id="ps-products-message"></p>
+        </section>
+        <section class="ps-section" aria-labelledby="ps-branches-title">
+            <div class="ps-heading"><div><h2 id="ps-branches-title">Sucursales</h2><p>Alcance definido por la sesiÃ³n y los permisos del backend</p></div><span class="ps-tag" id="ps-branches-meta"></span></div>
+            <div class="ps-table-scroller" id="ps-branches"></div><p class="ps-message" id="ps-branches-message"></p>
+        </section>
+        <section class="ps-section" aria-labelledby="ps-devices-title">
+            <div class="ps-heading"><div><h2 id="ps-devices-title">Dispositivos y sincronizaciÃ³n</h2><p>Ãšltima sincronizaciÃ³n solo si el servidor proporciona el dato</p></div><span class="ps-tag" id="ps-devices-meta"></span></div>
+            <div class="ps-table-scroller" id="ps-devices"></div><p class="ps-message" id="ps-devices-message"></p>
+        </section>
+    </div>
+    <section class="ps-section" aria-labelledby="ps-sales-title">
+        <div class="ps-heading"><div><h2 id="ps-sales-title">Ventas recientes</h2><p>Muestra limitada del endpoint de ventas: no representa el total de ventas del negocio.</p></div><span class="ps-tag" id="ps-sales-meta"></span></div>
+        <div class="ps-table-scroller" id="ps-sales"></div><p class="ps-message" id="ps-sales-message"></p>
+        <a class="ps-report-link" href="/reports">Abrir reportes y exportaciones autorizadas â†’</a>
+    </section>
+    <p class="ps-footer">ActualizaciÃ³n automÃ¡tica aproximada cada 30 segundos con esta pestaÃ±a visible. La hora de lectura no equivale a la hora de sincronizaciÃ³n de las tablets.</p>
+</main>
+<script src="~/js/supervision.js" asp-append-version="true" defer></script>

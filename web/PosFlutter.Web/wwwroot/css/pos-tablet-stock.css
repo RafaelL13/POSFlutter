@@ -1,0 +1,2 @@
+/* Inventory status chip mirrors the stock chip in Flutter's product cards. */
+.stock-chip{align-self:flex-start;padding:3px 8px;border-radius:999px;background:#e8f5ec;color:#257a4b;font-size:.78rem;font-weight:700}.stock-chip.out{background:#fce8e6;color:#b42318}.tablet-product-card button:disabled{cursor:not-allowed;opacity:.55}

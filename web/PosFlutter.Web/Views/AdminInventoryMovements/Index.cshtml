@@ -1,0 +1,59 @@
+@{
+    ViewData["Title"] = "Movimientos de inventario";
+}
+<section class="container py-4" aria-labelledby="movementTitle">
+    <h1 id="movementTitle">Movimientos de inventario</h1>
+    <p>Historial y ajustes autorizados de la sucursal activa. La sucursal se determina por la sesión y no puede modificarse desde el navegador.</p>
+    <section class="inventory-adjustment card mb-4" aria-labelledby="adjustmentTitle">
+        <div class="card-body">
+            <h2 id="adjustmentTitle" class="h4">Ajuste de existencias</h2>
+            <p class="text-muted">Registra una entrada o salida excepcional. Primero se valida disponibilidad; la confirmación es transaccional e idempotente.</p>
+            @Html.AntiForgeryToken()
+            <form id="inventoryAdjustmentForm" novalidate>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="adjustmentProduct" class="form-label">Producto</label>
+                        <select id="adjustmentProduct" class="form-select" required><option value="">Cargando productos…</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="adjustmentType" class="form-label">Tipo de ajuste</label>
+                        <select id="adjustmentType" class="form-select"><option value="in">Entrada</option><option value="out">Salida</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="adjustmentQuantity" class="form-label">Cantidad</label>
+                        <input id="adjustmentQuantity" class="form-control" type="number" min="1" max="1000000" step="1" inputmode="numeric" required />
+                    </div>
+                    <div class="col-md-4" id="adjustmentCostGroup">
+                        <label for="adjustmentCost" class="form-label">Costo unitario (centavos)</label>
+                        <input id="adjustmentCost" class="form-control" type="number" min="0" max="922337203685477" step="1" inputmode="numeric" />
+                    </div>
+                    <div class="col-md-8">
+                        <label for="adjustmentReason" class="form-label">Motivo</label>
+                        <input id="adjustmentReason" class="form-control" maxlength="240" minlength="5" required placeholder="Ej.: recepción extraordinaria validada" />
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2 flex-wrap">
+                    <button id="previewAdjustment" type="button" class="btn btn-outline-primary">Validar ajuste</button>
+                    <button id="commitAdjustment" type="submit" class="btn btn-primary" disabled>Confirmar ajuste</button>
+                </div>
+                <p id="adjustmentStatus" class="mt-3 mb-0" role="status" aria-live="polite"></p>
+            </form>
+        </div>
+    </section>
+    <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-6">
+            <label for="productId" class="form-label">Identificador del producto (opcional)</label>
+            <input id="productId" type="text" class="form-control" placeholder="GUID del producto" autocomplete="off" />
+        </div>
+        <div class="col-auto"><button id="loadMovements" type="button" class="btn btn-primary">Consultar</button></div>
+    </div>
+    <p id="movementStatus" role="status" aria-live="polite"></p>
+    <div class="table-responsive">
+        <table class="table table-striped table-sm">
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Cambio</th><th>Anterior</th><th>Nuevo</th><th>Referencia</th></tr></thead>
+            <tbody id="movementRows"></tbody>
+        </table>
+    </div>
+    <button id="moreMovements" type="button" class="btn btn-outline-secondary" hidden>Cargar más</button>
+</section>
+<script src="~/js/admin-inventory-movements.js" asp-append-version="true"></script>

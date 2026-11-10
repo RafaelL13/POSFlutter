@@ -1,0 +1,48 @@
+@{
+    ViewData["Title"] = "Productos y precios";
+    var canWrite = ViewData["CanWriteLab"] is bool allow && allow;
+}
+<link rel="stylesheet" href="~/css/admin-products.css" asp-append-version="true" />
+<main id="ap-root" class="ap-shell" data-lab-writes="@(canWrite ? "true" : "false")">
+    <header class="ap-header">
+        <div><p class="ap-overline">POSFlutter Web · Catálogo</p><h1>Productos</h1>
+        <p>Administra el catálogo, precios de venta y alertas de stock.</p></div>
+        @if (canWrite)
+        {
+            <a class="ap-primary-action" href="#ap-editor">＋ Nuevo producto</a>
+        }
+        else
+        {
+            <button class="ap-primary-action" type="button" disabled aria-describedby="ap-readonly-note">＋ Nuevo producto</button>
+        }
+        <nav aria-label="Administración"><a href="/admin/categories">Categorías</a><a href="/supervision">Supervisión</a><a href="/reports">Reportes</a></nav>
+    </header>
+    <p id="ap-readonly-note" class="ap-notice" role="note">@(canWrite ? "Crear un producto no agrega existencias; registra una compra o entrada para aumentarlo." : "Solo lectura: altas y cambios desactivados por seguridad hasta la aceptación de laboratorio.")</p>
+    <p id="ap-status" role="status" aria-live="polite">Consultando productos…</p>
+    <section class="ap-list" aria-labelledby="ap-list-title">
+        <div class="ap-toolbar"><h2 id="ap-list-title">Catálogo</h2><label>Buscar <input id="ap-filter" type="search" placeholder="Nombre, código o código de barras" /></label><button type="button" id="ap-reload">Actualizar</button></div>
+        <div class="ap-card-list" id="ap-rows"></div>
+    </section>
+    @if (canWrite)
+    {
+        <section class="ap-editor" aria-labelledby="ap-editor-title">
+            <h2 id="ap-editor-title">Alta o edición de producto (LAB)</h2>
+            @Html.AntiForgeryToken()
+            <form id="ap-form">
+                <div class="ap-fields">
+                    <label>Código* <input name="code" maxlength="80" required autocomplete="off" /></label>
+                    <label>Código de barras <input name="barcode" maxlength="120" autocomplete="off" /></label>
+                    <label>Nombre* <input name="name" maxlength="160" required /></label>
+                    <label>Presentación* <input name="presentation" maxlength="80" required value="Pieza" /></label>
+                    <label>Categoría <select name="categoryGlobalId"><option value="">Sin categoría</option></select></label>
+                    <label>Precio de venta (MXN)* <input name="price" type="number" min="0" max="100000000" step="0.01" required value="0.00" /></label>
+                    <label>Stock mínimo* <input name="minimumStock" type="number" min="0" max="2147483647" step="1" required value="0" /></label>
+                    <label class="ap-check"><input name="active" type="checkbox" checked /> Producto activo</label>
+                </div>
+                <div class="ap-actions"><button type="submit" id="ap-save">Guardar en LAB</button><button type="button" id="ap-clear">Nuevo producto</button></div>
+            </form>
+            <p class="ap-help">El precio es global para el negocio; no se altera el stock al modificar la ficha. Cada cambio utiliza la versión del servidor para detectar conflictos y la cola de sincronización existente.</p>
+        </section>
+    }
+</main>
+<script src="~/js/admin-products.js" asp-append-version="true" defer></script>

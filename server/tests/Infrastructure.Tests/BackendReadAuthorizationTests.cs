@@ -181,6 +181,22 @@ public sealed class BackendReadAuthorizationTests
     }
 
     [Fact]
+    public async Task Device_monitor_filters_are_tenant_scoped_and_unknown_sync_is_preserved()
+    {
+        await using var test=await TestDatabase.CreateAsync();
+        var tenant=await test.SeedTenantAsync("Monitor",role:"Administrator"); var foreign=await test.SeedTenantAsync("ForeignMonitor",role:"Administrator");
+        var branch=new Branch { GlobalId=Guid.NewGuid(),BusinessId=tenant.Business.Id,Name="Secondary",CreatedAt=DateTimeOffset.UtcNow,UpdatedAt=DateTimeOffset.UtcNow };
+        test.Db.Branches.Add(branch); await test.Db.SaveChangesAsync(CancellationToken);
+        var unsynced=new Device { GlobalId=Guid.NewGuid(),BranchId=branch.Id,Name="No sync",Mode="PointOfSale",CreatedAt=DateTimeOffset.UtcNow,LastSyncAt=null };
+        test.Db.Devices.Add(unsynced); await test.Db.SaveChangesAsync(CancellationToken);
+        var service=new TenantReadService(test.Db); var context=Context(tenant);
+        var branchRows=Json(await service.DevicesAsync(context,CancellationToken,branch.GlobalId));
+        Assert.Contains(unsynced.GlobalId.ToString(),branchRows); Assert.Contains("lastSyncAt",branchRows); Assert.DoesNotContain(tenant.Device.GlobalId.ToString(),branchRows);
+        var foreignRows=Json(await service.DevicesAsync(context,CancellationToken,foreign.Branch.GlobalId));
+        Assert.Equal("[]",foreignRows);
+    }
+
+    [Fact]
     public async Task Stale_role_inactive_user_and_cross_tenant_context_are_denied()
     {
         await using var test = await TestDatabase.CreateAsync();
@@ -239,6 +255,39 @@ public sealed class BackendReadAuthorizationTests
         await Denied(() => sellerService.UsersAsync(Context(seller), CancellationToken));
         AssertSafeOperational(Json(
             await sellerService.SalesAsync(Context(seller), CancellationToken)));
+    }
+
+    [Fact]
+    public async Task Product_catalog_exposes_only_tenant_branch_stock_and_category()
+    {
+        await using var test = await TestDatabase.CreateAsync();
+        var tenant = await test.SeedTenantAsync("Catalog");
+        var foreign = await test.SeedTenantAsync("CatalogForeign");
+        var now = DateTimeOffset.UtcNow;
+        var category = new Category { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, Name = "Bebidas", UpdatedAt = now };
+        var product = new Product { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, CategoryGlobalId = category.GlobalId, Code = "OWN-CATALOG", Name = "Agua", SalePriceCents = 1000, UpdatedAt = now };
+        var foreignProduct = new Product { GlobalId = Guid.NewGuid(), BusinessId = foreign.Business.Id, Code = "FOREIGN-CATALOG", Name = "Ajeno", SalePriceCents = 1000, UpdatedAt = now };
+        var otherBranch = new Branch { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, Name = "Otra sucursal", CreatedAt = now, UpdatedAt = now };
+        test.Db.AddRange(category, product, foreignProduct, otherBranch);
+        await test.Db.SaveChangesAsync(CancellationToken);
+        test.Db.InventoryLots.AddRange(
+            new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, BranchId = tenant.Branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 7, AvailableQuantity = 7, UnitCostCents = 500, Active = true, CreatedAt = now },
+            new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, BranchId = tenant.Branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 50, AvailableQuantity = 50, UnitCostCents = 500, Active = false, CreatedAt = now },
+            new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, BranchId = tenant.Branch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 30, AvailableQuantity = 0, UnitCostCents = 500, Active = true, CreatedAt = now },
+            new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = tenant.Business.Id, BranchId = otherBranch.Id, ProductGlobalId = product.GlobalId, EntryDate = now, InitialQuantity = 40, AvailableQuantity = 40, UnitCostCents = 500, Active = true, CreatedAt = now },
+            new InventoryLot { GlobalId = Guid.NewGuid(), BusinessId = foreign.Business.Id, BranchId = foreign.Branch.Id, ProductGlobalId = foreignProduct.GlobalId, EntryDate = now, InitialQuantity = 99, AvailableQuantity = 99, UnitCostCents = 500, Active = true, CreatedAt = now });
+        await test.Db.SaveChangesAsync(CancellationToken);
+
+        var json = Json(await new TenantReadService(test.Db).ProductsAsync(Context(tenant), CancellationToken));
+
+        Assert.Contains("OWN-CATALOG", json);
+        Assert.Contains("Bebidas", json);
+        Assert.Contains("\"availableQuantity\":7", json);
+        Assert.DoesNotContain("FOREIGN-CATALOG", json);
+        using var document = JsonDocument.Parse(json);
+        Assert.DoesNotContain(
+            document.RootElement.EnumerateArray(),
+            item => item.GetProperty("availableQuantity").GetInt32() == 99);
     }
 
     private static void AssertSafeOperational(string json)

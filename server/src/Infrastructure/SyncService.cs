@@ -157,18 +157,19 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         return new SyncPushResponse(results, DateTimeOffset.UtcNow);
     }
 
+    public Task<SyncPullResponse> PullAsync(long after, int take, SyncTenantContext tenant, CancellationToken cancellationToken)
+        => PullAsync(after, take, tenant, cancellationToken, false);
+
     public async Task<SyncPullResponse> PullAsync(
-        long after,
-        int take,
-        SyncTenantContext tenant,
-        CancellationToken cancellationToken)
+        long after, int take, SyncTenantContext tenant,
+        CancellationToken cancellationToken, bool includePurchases)
     {
         if (after < 0) throw new ArgumentOutOfRangeException(nameof(after));
         take = Math.Clamp(take <= 0 ? 100 : take, 1, 200);
         await EnsureTenantActiveAsync(tenant, cancellationToken);
 
         var rows = await _db.SyncChanges.AsNoTracking()
-            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after)
+            .Where(x => x.BusinessId == tenant.BusinessId && x.Id > after && x.EntityType != "WebSaleInventory" && (includePurchases || x.EntityType != "Purchase"))
             .OrderBy(x => x.Id)
             .Take(take + 1)
             .ToListAsync(cancellationToken);
@@ -718,6 +719,26 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             cancellationToken)) return;
 
         var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
+        long? cashSessionId = null;
+        if (payload.CashSessionGlobalId is { } cashSessionGlobalId)
+        {
+            if (payload.PaymentMethod != "Cash")
+                throw new ArgumentException("Only cash expenses can reference a cash session.");
+
+            var session = await _db.CashSessions.AsNoTracking().SingleOrDefaultAsync(
+                x => x.BusinessId == tenant.BusinessId &&
+                     x.BranchId == tenant.BranchId &&
+                     x.DeviceId == tenant.DeviceId &&
+                     x.GlobalId == cashSessionGlobalId,
+                cancellationToken);
+            if (session is null)
+                throw new InvalidOperationException($"Cash session {cashSessionGlobalId} has not been synchronized yet.");
+            if (payload.Date < session.OpenedAt ||
+                (session.ClosedAt is { } closedAt && payload.Date > closedAt))
+                throw new ArgumentException("Expense date is outside the cash session interval.");
+            cashSessionId = session.Id;
+        }
+
         _db.Expenses.Add(new Expense
         {
             GlobalId = payload.GlobalId,
@@ -725,6 +746,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
             BranchId = tenant.BranchId,
             DeviceId = tenant.DeviceId,
             UserId = userId,
+            CashSessionId = cashSessionId,
             ExpenseDate = payload.Date,
             Concept = payload.Concept.Trim(),
             Category = Clean(payload.Category),
@@ -743,103 +765,7 @@ public sealed class SyncService(PosDbContext db) : ISyncService
         var payload = Deserialize<PurchaseSyncPayload>(operation);
         ValidateEnvelope(operation, payload.GlobalId);
         ValidateTransactionalContext(payload.BusinessGlobalId, payload.BranchGlobalId, payload.DeviceGlobalId, tenant);
-        if (payload.Lines.Count == 0) throw new ArgumentException("Purchase must contain at least one line.");
-        if (payload.TotalCents < 0) throw new ArgumentException("Invalid purchase total.");
-        if (await _db.Purchases.AsNoTracking().AnyAsync(
-            x => x.BusinessId == tenant.BusinessId && x.GlobalId == payload.GlobalId,
-            cancellationToken)) return;
-        if (!await _db.Suppliers.AsNoTracking().AnyAsync(
-            x => x.BusinessId == tenant.BusinessId && x.GlobalId == payload.SupplierGlobalId,
-            cancellationToken))
-            throw new InvalidOperationException($"Referenced supplier {payload.SupplierGlobalId} has not been synchronized yet.");
-
-        var userId = await RequiredTenantUserIdAsync(payload.UserGlobalId, tenant, cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var purchase = new Purchase
-        {
-            GlobalId = payload.GlobalId,
-            BusinessId = tenant.BusinessId,
-            BranchId = tenant.BranchId,
-            DeviceId = tenant.DeviceId,
-            UserId = userId,
-            SupplierGlobalId = payload.SupplierGlobalId,
-            PurchaseDate = payload.Date,
-            Reference = Clean(payload.Reference),
-            Notes = Clean(payload.Notes),
-            TotalCents = payload.TotalCents,
-            Status = "Confirmed",
-            CreatedAt = now
-        };
-
-        var computedTotal = 0L;
-        var stocks = new Dictionary<Guid, int>();
-        foreach (var linePayload in payload.Lines)
-        {
-            if (linePayload.Quantity <= 0 || linePayload.UnitCostCents < 0)
-                throw new ArgumentException("Invalid purchase line.");
-            if (!await _db.Products.AsNoTracking().AnyAsync(
-                x => x.GlobalId == linePayload.ProductGlobalId && x.BusinessId == tenant.BusinessId,
-                cancellationToken))
-                throw new InvalidOperationException($"Referenced product {linePayload.ProductGlobalId} has not been synchronized yet.");
-            if (await _db.InventoryLots.AsNoTracking().AnyAsync(
-                x => x.BusinessId == tenant.BusinessId && x.GlobalId == linePayload.LotGlobalId,
-                cancellationToken))
-                throw new ArgumentException("Inventory lot UUID is already in use for this tenant.");
-
-            var subtotal = checked((long)linePayload.Quantity * linePayload.UnitCostCents);
-            computedTotal = checked(computedTotal + subtotal);
-            var line = new PurchaseLine
-            {
-                GlobalId = linePayload.DetailGlobalId,
-                ProductGlobalId = linePayload.ProductGlobalId,
-                Quantity = linePayload.Quantity,
-                UnitCostCents = linePayload.UnitCostCents,
-                SubtotalCents = subtotal,
-                Lot = new InventoryLot
-                {
-                    GlobalId = linePayload.LotGlobalId,
-                    BusinessId = tenant.BusinessId,
-                    BranchId = tenant.BranchId,
-                    ProductGlobalId = linePayload.ProductGlobalId,
-                    PurchaseLineGlobalId = linePayload.DetailGlobalId,
-                    EntryDate = payload.Date,
-                    InitialQuantity = linePayload.Quantity,
-                    AvailableQuantity = linePayload.Quantity,
-                    UnitCostCents = linePayload.UnitCostCents,
-                    Active = true,
-                    CreatedAt = now
-                }
-            };
-            purchase.Lines.Add(line);
-
-            if (!stocks.TryGetValue(linePayload.ProductGlobalId, out var previousStock))
-            {
-                previousStock = await _db.InventoryLots.AsNoTracking()
-                    .Where(x => x.BusinessId == tenant.BusinessId && x.BranchId == tenant.BranchId && x.ProductGlobalId == linePayload.ProductGlobalId && x.Active)
-                    .SumAsync(x => (int?)x.AvailableQuantity, cancellationToken) ?? 0;
-            }
-            var newStock = checked(previousStock + linePayload.Quantity);
-            stocks[linePayload.ProductGlobalId] = newStock;
-            _db.InventoryMovements.Add(new InventoryMovement
-            {
-                GlobalId = Guid.NewGuid(),
-                BusinessId = tenant.BusinessId,
-                BranchId = tenant.BranchId,
-                ProductGlobalId = linePayload.ProductGlobalId,
-                MovementDate = payload.Date,
-                Type = "Purchase",
-                QuantityDelta = linePayload.Quantity,
-                PreviousStock = previousStock,
-                NewStock = newStock,
-                ReferenceGlobalId = payload.GlobalId,
-                UserId = userId,
-                DeviceId = tenant.DeviceId,
-                Notes = Clean(payload.Reference)
-            });
-        }
-        if (computedTotal != payload.TotalCents)
-            throw new ArgumentException("Purchase total does not equal the sum of lines.");
-        _db.Purchases.Add(purchase);
+        await new PurchaseReceivingService(_db).ReceiveAsync(payload, tenant, cancellationToken);
     }
 
     private async Task ApplyCentralTransferAppliedAsync(

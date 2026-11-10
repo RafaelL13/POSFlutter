@@ -35,6 +35,7 @@ final class ExpenseRepository {
         'branch_id': ctx.branchId,
         'created_at': now,
       });
+      String? cashSessionGlobalId;
       if (paymentMethod == 'Cash') {
         final cash = await tx.query(
           'cash_sessions',
@@ -45,6 +46,10 @@ final class ExpenseRepository {
         );
         if (cash.isEmpty) {
           throw StateError('Debe existir caja abierta para gasto en efectivo.');
+        }
+        cashSessionGlobalId = cash.first['global_id']?.toString();
+        if (cashSessionGlobalId == null || cashSessionGlobalId.isEmpty) {
+          throw StateError('La caja abierta no tiene identificador de sincronización.');
         }
         await tx.insert('cash_movements', {
           'global_id': _ids.newId(),
@@ -73,6 +78,7 @@ final class ExpenseRepository {
           'category': category,
           'amountCents': amountCents,
           'paymentMethod': paymentMethod,
+          'cashSessionGlobalId': cashSessionGlobalId,
         }),
         'created_at': now,
       });

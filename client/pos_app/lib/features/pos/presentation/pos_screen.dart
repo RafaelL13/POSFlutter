@@ -12,6 +12,7 @@ import 'package:pos_app/features/pos/data/pos_catalog_repository.dart';
 import 'package:pos_app/features/pos/data/pos_repository.dart';
 import 'package:pos_app/features/pos/domain/cart.dart';
 import 'package:pos_app/features/pos/presentation/pos_controller.dart';
+import 'package:pos_app/features/pos/presentation/web_combo_sale_dialog.dart';
 import 'package:pos_app/shared/presentation/app_navigation_drawer.dart';
 import 'package:pos_app/shared/presentation/special_authorization_dialog.dart';
 import 'package:pos_app/sync/presentation/sync_status_panel.dart';
@@ -67,6 +68,22 @@ class _PosScreenState extends State<PosScreen> {
       appBar: AppBar(
         title: const Text('Nueva venta'),
         actions: [
+          IconButton(
+            key: const Key('pos-online-combo'),
+            tooltip: 'Combo en lÃ­nea',
+            icon: const Icon(Icons.local_offer_outlined),
+            onPressed: controller.lines.isNotEmpty || controller.isSubmitting
+                ? null
+                : () async {
+                    final result = await showDialog<Object>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => const WebComboSaleDialog(),
+                    );
+                    if (!mounted || result == null) return;
+                    _message('Venta de combo registrada en servidor. Consulta ventas para confirmar el folio.');
+                  },
+          ),
           if (controller.lines.isNotEmpty)
             if (MediaQuery.sizeOf(context).width < 600)
               IconButton(

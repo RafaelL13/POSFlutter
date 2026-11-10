@@ -11,7 +11,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<InitialInventory> InitialInventories => Set<InitialInventory>(); public DbSet<InitialInventoryLine> InitialInventoryLines => Set<InitialInventoryLine>();
     public DbSet<CentralInventoryTransferReceipt> CentralInventoryTransferReceipts => Set<CentralInventoryTransferReceipt>();
     public DbSet<CentralInventoryTransferApplication> CentralInventoryTransferApplications => Set<CentralInventoryTransferApplication>();
-    public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<CashMovement> CashMovements => Set<CashMovement>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
+    public DbSet<CashSession> CashSessions => Set<CashSession>(); public DbSet<CashMovement> CashMovements => Set<CashMovement>(); public DbSet<Expense> Expenses => Set<Expense>(); public DbSet<InboundOperation> InboundOperations => Set<InboundOperation>(); public DbSet<SyncChange> SyncChanges => Set<SyncChange>(); public DbSet<AdminProductAudit> AdminProductAudits => Set<AdminProductAudit>(); public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>(); public DbSet<DeviceEnrollmentToken> DeviceEnrollmentTokens => Set<DeviceEnrollmentToken>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -25,7 +25,18 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         b.Entity<Purchase>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.PurchaseId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<PurchaseLine>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.HasOne(x => x.Lot).WithOne().HasForeignKey<InventoryLot>(x => x.PurchaseLineGlobalId).HasPrincipalKey<PurchaseLine>(x => x.GlobalId).OnDelete(DeleteBehavior.Restrict); e.ToTable(t => t.HasCheckConstraint("CK_PurchaseLine_Qty", "[Quantity] > 0")); });
         b.Entity<InventoryLot>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.BranchId, x.ProductGlobalId, x.EntryDate }); e.ToTable(t => { t.HasCheckConstraint("CK_Lot_Initial", "[InitialQuantity] > 0"); t.HasCheckConstraint("CK_Lot_Available", "[AvailableQuantity] >= 0 AND [AvailableQuantity] <= [InitialQuantity]"); t.HasCheckConstraint("CK_Lot_Cost", "[UnitCostCents] >= 0"); }); });
-        b.Entity<InventoryMovement>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.BranchId, x.ProductGlobalId, x.MovementDate }); });
+        b.Entity<InventoryMovement>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique();
+            e.HasIndex(x => new { x.BusinessId, x.BranchId, x.ProductGlobalId, x.MovementDate });
+            // The controller serializes requests, but this index is the durable
+            // last line of defense against duplicate adjustment application when
+            // a process is retried or a second writer bypasses that lock.
+            e.HasIndex(x => new { x.BusinessId, x.BranchId, x.ReferenceGlobalId })
+                .IsUnique()
+                .HasFilter("[Type] IN ('AdjustmentIn','AdjustmentOut')");
+        });
         b.Entity<InitialInventory>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.BranchId, x.SourceFingerprint }).IsUnique(); e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.InitialInventoryId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<InitialInventoryLine>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.HasIndex(x => new { x.InitialInventoryId, x.ProductGlobalId }).IsUnique(); e.ToTable(t => t.HasCheckConstraint("CK_InitialInventoryLine_Quantity", "[Quantity] > 0")); });
         b.Entity<CentralInventoryTransferReceipt>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.TransferGlobalId }).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.BranchId, x.ReceivedAt }); });
@@ -39,7 +50,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         b.Entity<Sale>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.IdempotencyKey }).IsUnique(); e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Cascade); e.HasMany(x => x.Payments).WithOne().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Cascade); });
         b.Entity<SaleLine>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.HasMany(x => x.Lots).WithOne().HasForeignKey(x => x.SaleLineId).OnDelete(DeleteBehavior.Cascade); e.ToTable(t => t.HasCheckConstraint("CK_SaleLine_Qty", "[Quantity] > 0")); });
         b.Entity<SaleLotAllocation>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.ToTable(t => t.HasCheckConstraint("CK_SaleLot_Qty", "[Quantity] > 0")); });
-        b.Entity<SalePayment>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.HasIndex(x => new { x.SaleId, x.Method }).IsUnique(); e.Property(x => x.Method).HasMaxLength(16); e.ToTable(t => { t.HasCheckConstraint("CK_SalePayment_Amount", "[AmountCents] > 0"); t.HasCheckConstraint("CK_SalePayment_Method", "[Method] IN ('Cash','Card','Transfer')"); }); });
+        b.Entity<SalePayment>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.GlobalId).IsUnique(); e.HasIndex(x => new { x.SaleId, x.Method }).IsUnique(); e.HasIndex(x => x.CashSessionId); e.HasOne<CashSession>().WithMany().HasForeignKey(x => x.CashSessionId).OnDelete(DeleteBehavior.Restrict); e.Property(x => x.Method).HasMaxLength(16); e.ToTable(t => { t.HasCheckConstraint("CK_SalePayment_Amount", "[AmountCents] > 0"); t.HasCheckConstraint("CK_SalePayment_Method", "[Method] IN ('Cash','Card','Transfer')"); }); });
         b.Entity<CashSession>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); });
         b.Entity<CashMovement>(e =>
         {
@@ -56,9 +67,35 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
                 t.HasCheckConstraint("CK_CashMovement_Amount", "([Type] = 'ManualIn' AND [AmountCents] > 0) OR ([Type] = 'ManualOut' AND [AmountCents] < 0)");
             });
         });
-        b.Entity<Expense>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.ToTable(t => t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
+        b.Entity<Expense>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.GlobalId }).IsUnique(); e.HasIndex(x => x.CashSessionId); e.HasOne<CashSession>().WithMany().HasForeignKey(x => x.CashSessionId).OnDelete(DeleteBehavior.Restrict); e.ToTable(t => t.HasCheckConstraint("CK_Expense_Amount", "[AmountCents] > 0")); });
         b.Entity<InboundOperation>(e => { e.HasKey(x => x.Id); e.HasIndex(x => new { x.BusinessId, x.OperationGlobalId }).IsUnique(); });
         b.Entity<SyncChange>(e => { e.HasKey(x => x.Id); e.Property(x => x.Id).ValueGeneratedOnAdd(); e.HasIndex(x => new { x.BusinessId, x.Id }); });
+        b.Entity<AdminProductAudit>(e =>
+        {
+            e.ToTable("AdminProductAudits");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.Property(x => x.Operation).HasMaxLength(12).IsRequired();
+            if (Database.IsSqlServer())
+            {
+                e.Property(x => x.BeforeJson).HasColumnType("nvarchar(max)");
+                e.Property(x => x.AfterJson).HasColumnType("nvarchar(max)").IsRequired();
+            }
+            else
+            {
+                // SQLite backs only the isolated test harness; it does not
+                // understand SQL Server's nvarchar(max) type syntax.
+                e.Property(x => x.BeforeJson);
+                e.Property(x => x.AfterJson).IsRequired();
+            }
+            e.HasIndex(x => new { x.BusinessId, x.SyncChangeId }).IsUnique();
+            e.HasIndex(x => new { x.BusinessId, x.ProductGlobalId, x.CreatedAt });
+            e.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_AdminProductAudit_Operation", "[Operation] IN ('Create','Update')");
+                t.HasCheckConstraint("CK_AdminProductAudit_Versions", "([Operation] = 'Create' AND [PreviousServerVersion] IS NULL AND [NewServerVersion] = 1) OR ([Operation] = 'Update' AND [PreviousServerVersion] >= 1 AND [NewServerVersion] = [PreviousServerVersion] + 1)");
+            });
+        });
         b.Entity<RefreshToken>(e => { e.HasKey(x => x.Id); e.HasIndex(x => x.TokenHash).IsUnique(); e.HasIndex(x => new { x.BusinessId, x.UserId, x.DeviceId }); });
         b.Entity<DeviceEnrollmentToken>(e =>
         {

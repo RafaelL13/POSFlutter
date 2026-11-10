@@ -1,0 +1,34 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Registrar compra";
+    var suppliers = (IEnumerable<SelectListItem>)ViewBag.Suppliers;
+    var products = (IEnumerable<SelectListItem>)ViewBag.Products;
+}
+<link rel="stylesheet" href="~/css/purchase-v51.css" asp-append-version="true" />
+<section class="purchase-page"><div class="purchase-heading"><div><span class="eyebrow">COMPRAS · RECEPCIÓN</span><h1>Registrar compra</h1><p>Recibe mercancía y genera lotes FIFO con su costo histórico.</p></div><a class="secondary action-link" href="/purchases">Ver historial</a></div>
+<p class="muted">Registro directo en SQL Server. Comprueba las cantidades y costos antes de guardar.</p>
+<form id="purchase-form" class="purchase-card" data-purchase-context="@JsonSerializer.Serialize(ViewBag.PurchaseContext)">
+    @Html.AntiForgeryToken()
+    <div class="mb-3"><label for="supplier" class="form-label">Proveedor</label><select id="supplier" class="form-select" required>
+        <option value="">Seleccionar proveedor</option>
+        @foreach (var p in suppliers) { <option value="@p.Value">@p.Text</option> }
+    </select></div>
+    <div class="mb-3"><label for="product" class="form-label">Producto</label><select id="product" class="form-select" aria-describedby="add-feedback">
+        <option value="">Seleccionar producto</option>
+        @foreach (var p in products) { <option value="@p.Value">@p.Text</option> }
+    </select></div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-3"><label for="quantity" class="form-label">Cantidad</label><input id="quantity" type="number" min="1" step="1" value="1" class="form-control" /></div>
+      <div class="col-md-3"><label for="cost" class="form-label">Costo unitario MXN</label><input id="cost" type="text" inputmode="decimal" value="0.00" class="form-control" /></div>
+      <div class="col-md-3 d-flex align-items-end"><button id="add-line" type="button" class="btn btn-secondary">Agregar producto</button></div>
+    </div>
+    <p id="add-feedback" role="status" aria-live="polite" class="purchase-feedback"></p>
+    <table class="table"><thead><tr><th>Producto</th><th>Cantidad</th><th>Costo</th><th>Subtotal</th><th></th></tr></thead><tbody id="lines"></tbody></table>
+    <div class="purchase-total"><span>Total de compra</span><strong id="total">$0.00</strong></div>
+    <div class="mb-3"><label for="reference" class="form-label">Referencia</label><input id="reference" maxlength="120" class="form-control" /></div>
+    <div class="mb-3"><label for="notes" class="form-label">Notas</label><textarea id="notes" maxlength="500" class="form-control"></textarea></div>
+    <button type="submit" id="submit" class="btn btn-primary">Guardar y recibir compra</button>
+    <p id="result" role="status" aria-live="polite" class="form-message"></p>
+</form></section>
+<script src="~/js/purchase-v51.js" asp-append-version="true" defer></script>

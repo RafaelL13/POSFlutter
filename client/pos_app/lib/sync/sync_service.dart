@@ -16,13 +16,13 @@ typedef SyncPullExecutor = Future<SyncPullBatch> Function(int cursor);
 
 final class SyncService {
   SyncService({
-    required this._database,
-    required this._local,
+    required AppDatabase database,
+    required SyncRepository local,
     required RemoteSyncRepository remote,
     SyncConnectivityLoader? connectivity,
     SyncPushExecutor? push,
     SyncPullExecutor? pull,
-  }) : _connectivity =
+  }) : _database = database, _local = local, _connectivity =
            connectivity ?? (() => Connectivity().checkConnectivity()),
        _push = push ?? remote.push,
        _pull = pull ?? ((cursor) => remote.pull(cursor));
